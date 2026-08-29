@@ -3091,8 +3091,7 @@ checksum = "2896d95c02a80c6d6a5d6e953d479f5ddf2dfdb6a244441010e373ac0fb88971"
 [[package]]
 name = "uiua"
 version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3959b54d99cadd9f130862b4cc93d4d484163afdd72d6bf19ed0d8d00e147b8"
+source = "git+https://github.com/uiua-lang/uiua#10c2b47bb9fb4cfb4ec48c8ddb3b3300bd6839b5"
 dependencies = [
  "arboard",
  "bitflags 2.13.1",
@@ -3175,8 +3174,7 @@ dependencies = [
 [[package]]
 name = "uiua_parser"
 version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cfa8d0f261ff39f8e62697ea68caf6aeeec24fe1615099e089f2605a20106ca"
+source = "git+https://github.com/uiua-lang/uiua#10c2b47bb9fb4cfb4ec48c8ddb3b3300bd6839b5"
 dependencies = [
  "bytemuck",
  "colored",
