@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use itertools::Itertools;
+
 use crate::hir::{Binding, Function, Graph, Hir, Node, NodeIndex};
 
 #[derive(thiserror::Error, Debug)]
@@ -72,19 +74,23 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
     for binding_info in &uasm.bindings {
         use uiua::BindingKind as Bk;
         match &binding_info.kind {
-            Bk::Const(value) => todo!(),
             Bk::Func(function) => {
                 let uiua_node = &uasm[function];
                 let binding = Binding {
                     span: binding_info.span.clone(),
                     func_id: function.id.clone(),
-                    hash: 0, // FIXME
+                    hash: 0, // FIXME: Uiua currently keeps this value private, so we can't use it until that is changed
                     func: simulate_data_flow(uiua_node)?,
                 };
                 ir.bindings.push(binding);
             }
-            Bk::Module(module) => todo!(),
-            _ => continue,
+            Bk::Const(_value) => {
+                // Constants are currently not compiled into the IR
+            }
+            Bk::Module(_module) => {
+                // TOOD: Maybe datadef detection happens here?
+            }
+            _ => {}
         }
     }
 
@@ -107,28 +113,19 @@ fn simulate_data_flow(uiua_node: &uiua::Node) -> Result<Function, Error> {
     })
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "This function comprises one giant `match` block for handling stack manipulation"
+)]
 fn process_node(uiua_node: &uiua::Node, func_graph: &mut WorkingFuncGraph) -> Result<(), Error> {
     let sig = uiua_node.sig().map_err(|e| Error::Other(e.to_string()))?;
     func_graph.extend_args(sig.args());
-
-    /// Used to error if a modifier was passed any amount of functions other than one
-    fn one_func(prim: uiua::Primitive, funcs: &[uiua::SigNode]) -> Result<&uiua::SigNode, Error> {
-        if funcs.len() != 1 {
-            // bail!(
-            //     "{} passed {} functions instead of 1",
-            //     prim.format(),
-            //     funcs.len()
-            // );
-            return Err(Error::Other("TODO".into()));
-        }
-        Ok(&funcs[0])
-    }
 
     use uiua::ImplPrimitive as Ip;
     use uiua::Node as UNode;
     use uiua::Primitive as Pr;
     match uiua_node {
-        UNode::CustomInverse(custom_inverse, span) => {
+        UNode::CustomInverse(custom_inverse, _span) => {
             let uiua_node = custom_inverse
                 .normal
                 .as_ref()
@@ -137,35 +134,163 @@ fn process_node(uiua_node: &uiua::Node, func_graph: &mut WorkingFuncGraph) -> Re
         }
         UNode::PushUnder(n, _span) => func_graph
             .under_stack
-            .extend(func_graph.stack.drain(func_graph.stack.len() - n..).rev()),
+            .extend(drain_top_n(&mut func_graph.stack, *n).rev()),
         UNode::CopyToUnder(n, _span) => func_graph
             .under_stack
-            .extend(func_graph.stack[func_graph.stack.len() - n..].iter().rev()),
-        UNode::PopUnder(n, _span) => func_graph.stack.extend(
-            func_graph
-                .under_stack
-                .drain(func_graph.under_stack.len() - n..),
-        ),
+            .extend(top_n(&func_graph.stack, *n).iter().rev()),
+        UNode::PopUnder(n, _span) => func_graph
+            .stack
+            .extend(drain_top_n(&mut func_graph.under_stack, *n)),
         UNode::Prim(Pr::Identity, _span) => {}
         UNode::Prim(Pr::Pop, _span) => {
             func_graph.stack_pop();
+        }
+        UNode::Prim(Pr::Dup, _span) => {
+            func_graph.stack.push(func_graph.stack_top());
         }
         UNode::Prim(Pr::Flip, _span) => {
             let i = func_graph.stack.len() - 2;
             func_graph.stack[i..].reverse();
         }
         UNode::Mod(Pr::On, funcs, _span) => {
-            let func = one_func(Pr::On, funcs)?;
+            let func = &funcs[0];
             let preserved = func_graph.stack_top();
             process_node(&func.node, func_graph)?;
             func_graph.stack.push(preserved);
         }
+        UNode::ImplMod(Ip::OnSub(n), funcs, _span) => {
+            let func = &funcs[0];
+            let mut preserved = top_n(&func_graph.stack, *n).to_vec();
+            process_node(&func.node, func_graph)?;
+            func_graph.stack.append(&mut preserved);
+        }
+        UNode::Mod(Pr::By, funcs, _span) => {
+            let func = &funcs[0];
+            let n_args = func.sig.args();
+            let preserved = func_graph.stack_n(n_args);
+            func_graph
+                .stack
+                .insert(func_graph.stack.len() - n_args, preserved);
+            process_node(&func.node, func_graph)?;
+        }
+        UNode::ImplMod(Ip::BySub(n), funcs, _span) => {
+            let func = &funcs[0];
+            let n_args = func.sig.args();
+            let start_i = func_graph.stack.len() - n_args;
+            let preserved = func_graph.stack[start_i..start_i + n].to_vec();
+            func_graph.stack.splice(start_i..start_i, preserved);
+            process_node(&func.node, func_graph)?;
+        }
+        UNode::Mod(Pr::Off, funcs, _span) => {
+            let func = &funcs[0];
+            let n_args = func.sig.args();
+            let preserved = func_graph.stack_top();
+            func_graph
+                .stack
+                .insert(func_graph.stack.len() - n_args, preserved);
+            process_node(&func.node, func_graph)?;
+        }
+        UNode::ImplMod(Ip::OffSub(n), funcs, _span) => {
+            let func = &funcs[0];
+            let n_args = func.sig.args();
+            let start_i = func_graph.stack.len() - n_args;
+            let preserved = top_n(&func_graph.stack, *n).to_vec();
+            func_graph.stack.splice(start_i..start_i, preserved);
+            process_node(&func.node, func_graph)?;
+        }
+        UNode::Mod(Pr::With, funcs, _span) => {
+            let func = &funcs[0];
+            let n_args = func.sig.args();
+            let preserved = func_graph.stack_n(n_args);
+            process_node(&func.node, func_graph)?;
+            func_graph.stack.push(preserved);
+        }
+        UNode::ImplMod(Ip::WithSub(n), funcs, _span) => {
+            let func = &funcs[0];
+            let n_args = func.sig.args();
+            let start_i = func_graph.stack.len() - n_args;
+            let mut preserved = func_graph.stack[start_i..start_i + n].to_vec();
+            process_node(&func.node, func_graph)?;
+            func_graph.stack.append(&mut preserved);
+        }
+        UNode::Mod(Pr::Dip, funcs, _span) => {
+            let func = &funcs[0];
+            let skipped = func_graph.stack_pop();
+            process_node(&func.node, func_graph)?;
+            func_graph.stack.push(skipped);
+        }
+        UNode::ImplMod(Ip::DipN(n), funcs, _span) => {
+            let func = &funcs[0];
+            let mut skipped = drain_top_n(&mut func_graph.stack, *n).collect_vec();
+            process_node(&func.node, func_graph)?;
+            func_graph.stack.append(&mut skipped);
+        }
+        UNode::Mod(Pr::Fork, funcs, _span) => {
+            let reused = drain_top_n(&mut func_graph.stack, sig.args()).collect_vec();
+            for func in funcs.iter().rev() {
+                func_graph
+                    .stack
+                    .extend_from_slice(top_n(&reused, func.sig.args()));
+                process_node(&func.node, func_graph)?;
+            }
+        }
+        UNode::Mod(Pr::Bracket, funcs, _span) => {
+            let mut args = drain_top_n(&mut func_graph.stack, sig.args())
+                .rev()
+                .collect_vec();
+            for func in funcs.iter().rev() {
+                func_graph
+                    .stack
+                    .extend(drain_top_n(&mut args, func.sig.args()).rev());
+                process_node(&func.node, func_graph)?;
+            }
+        }
+        UNode::ImplMod(Ip::SidedBracket(_sided_subscript), _funcs, _span) => {
+            todo!("Subscripted `bracket` has not been implemented yet.")
+        }
+        UNode::Mod(Pr::Below, funcs, _span) => {
+            let func = &funcs[0];
+            func_graph
+                .stack
+                .extend(top_n(&func_graph.stack, func.sig.args()).to_vec());
+            process_node(&func.node, func_graph)?;
+        }
+        UNode::Mod(Pr::Both, funcs, _span) => {
+            let func = &funcs[0];
+            let saved = drain_top_n(&mut func_graph.stack, func.sig.args()).collect_vec();
+            process_node(&func.node, func_graph)?;
+            func_graph.stack.extend(saved);
+            process_node(&func.node, func_graph)?;
+        }
+        UNode::ImplMod(Ip::BothImpl(_subscript), _funcs, _span) => {
+            todo!("Subscripted `both` has not been implemented yet.")
+        }
+        UNode::Run(sub_nodes) => {
+            for sub_node in sub_nodes {
+                process_node(sub_node, func_graph)?;
+            }
+        }
+        UNode::Push(value) => {
+            let new_node_idx = func_graph.graph.add_node(Node::Constant(value.clone()));
+            func_graph.stack.push((new_node_idx, 0));
+        }
         _ if let Some((node, span)) = {
             match uiua_node {
-                UNode::Prim(prim, span) => Some((Node::PrimFunc(*prim), span)),
+                UNode::Prim(prim, span) => Some((Node::FuncPrim(*prim), span)),
+                UNode::ImplPrim(impl_prim, span) => Some((Node::FuncImplPrim(*impl_prim), span)),
                 UNode::Mod(prim, funcs, span) => Some((
-                    Node::PrimMod(
+                    Node::ModPrim(
                         *prim,
+                        funcs
+                            .iter()
+                            .map(|sig_node| simulate_data_flow(&sig_node.node))
+                            .collect::<Result<Vec<_>, _>>()?,
+                    ),
+                    span,
+                )),
+                UNode::ImplMod(impl_prim, funcs, span) => Some((
+                    Node::ModImplPrim(
+                        *impl_prim,
                         funcs
                             .iter()
                             .map(|sig_node| simulate_data_flow(&sig_node.node))
@@ -195,8 +320,16 @@ fn process_node(uiua_node: &uiua::Node, func_graph: &mut WorkingFuncGraph) -> Re
                 func_graph.stack.push((new_node_idx, out_i));
             }
         }
-        _ => todo!(),
+        _ => todo!("{:?}", uiua_node),
     }
 
     Ok(())
+}
+
+fn top_n<T>(slice: &[T], n: usize) -> &[T] {
+    &slice[slice.len() - n..]
+}
+
+fn drain_top_n<T>(stack: &mut Vec<T>, n: usize) -> impl DoubleEndedIterator<Item = T> {
+    stack.drain(stack.len() - n..)
 }

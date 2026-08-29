@@ -93,15 +93,17 @@ fn run() -> Result<(), ProgramError> {
                     .strip_prefix("digraph {\n")
                     .unwrap()
                     .to_owned();
-                dot_s.insert_str(
-                    0,
-                    r#"digraph {
+                dot_s = format!(
+                    r#"digraph {{
     node [shape=box]
     node [fontname="Uiua386"]
     edge [fontname="Uiua386"]
-"#,
+    label = "{}"
+    labelloc = "t"
+{dot_s}"#,
+                    binding.func_id
                 );
-                write!(output, "{dot_s}").unwrap();
+                write!(output, "{dot_s}")?;
             }
         }
         _ => todo!(),

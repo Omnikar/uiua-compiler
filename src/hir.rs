@@ -27,8 +27,10 @@ pub enum Node {
     Output,
     // Should this store a custom type instead?
     Constant(uiua::Value),
-    PrimFunc(uiua::Primitive),
-    PrimMod(uiua::Primitive, Vec<Function>),
+    FuncPrim(uiua::Primitive),
+    FuncImplPrim(uiua::ImplPrimitive),
+    ModPrim(uiua::Primitive, Vec<Function>),
+    ModImplPrim(uiua::ImplPrimitive, Vec<Function>),
 }
 
 #[derive(Debug)]
