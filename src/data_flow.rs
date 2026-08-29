@@ -106,7 +106,7 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
 fn simulate_data_flow(uiua_node: &uiua::Node) -> Result<Function, Error> {
     let mut func_graph = WorkingFuncGraph::empty();
     process_node(uiua_node, &mut func_graph)?;
-    for (in_i, (node_idx, out_i)) in func_graph.stack.into_iter().enumerate() {
+    for (in_i, (node_idx, out_i)) in func_graph.stack.into_iter().rev().enumerate() {
         func_graph
             .graph
             .add_edge(func_graph.output_idx, node_idx, (out_i, in_i));
