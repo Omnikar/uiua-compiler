@@ -3165,6 +3165,7 @@ dependencies = [
  "itertools",
  "llvm-sys 211.0.1",
  "petgraph",
+ "regex",
  "ron",
  "serde",
  "thiserror 2.0.20",

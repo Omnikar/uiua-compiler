@@ -15,13 +15,14 @@ struct Args {
     #[arg(short)]
     output: Option<String>,
     // TODO: Eventually change the default to executable
-    #[arg(long, value_enum, default_value_t = EmitFormat::Dot)]
+    #[arg(long, value_enum, default_value_t = EmitFormat::Hir)]
     emit: EmitFormat,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy)]
 enum EmitFormat {
     Dot,
+    Hir,
     LlvmIr,
     Executable,
 }
@@ -70,6 +71,7 @@ fn run() -> Result<(), ProgramError> {
     let path = PathBuf::from(args.filepath);
     let uasm = match path.extension() {
         Some(ext) if ext == "ua" => uiua::Compiler::with_backend(uiua::NativeSys)
+            .pre_eval_mode(uiua::PreEvalMode::Lazy)
             .load_file(&path)?
             .finish(),
         Some(ext) if ext == "uasm" => {
@@ -105,6 +107,17 @@ fn run() -> Result<(), ProgramError> {
                 );
                 write!(output, "{dot_s}")?;
             }
+        }
+        EmitFormat::Hir => {
+            let hir = data_flow::construct_hir(&uasm)?;
+
+            let mut output: Box<dyn Write> = if let Some(filename) = &args.output {
+                Box::new(std::fs::File::create(filename)?)
+            } else {
+                Box::new(std::io::stdout())
+            };
+
+            writeln!(output, "{hir}")?;
         }
         _ => todo!(),
     }

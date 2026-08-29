@@ -66,9 +66,15 @@ impl WorkingFuncGraph {
 
 pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
     let mut ir = Hir {
-        spans: uasm.spans.iter().cloned().collect(),
         datadefs: Vec::new(),
         bindings: Vec::new(),
+        spans: uasm.spans.iter().cloned().collect(),
+        files: uasm
+            .inputs
+            .files
+            .iter()
+            .map(|entry| (entry.key().clone(), entry.value().to_string()))
+            .collect(),
     };
 
     for binding_info in &uasm.bindings {
