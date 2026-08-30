@@ -17,7 +17,6 @@ ron = "0.12.2"
 serde = "1"
 
 inkwell = { version = "0.10.0", features = ["llvm22-1"] }
-llvm-sys = "211.0.0-rc1"
 petgraph = "0.8.3"
 
 uiua = { git = "https://github.com/uiua-lang/uiua" }

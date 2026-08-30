@@ -85,7 +85,7 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
                 let binding = Binding {
                     span: binding_info.span.clone(),
                     func_id: function.id.clone(),
-                    hash: 0, // FIXME: Uiua currently keeps this value private, so we can't use it until that is changed
+                    hash: function.hash(),
                     func: simulate_data_flow(uiua_node)?,
                 };
                 ir.bindings.push(binding);
