@@ -45,13 +45,13 @@ enum ProgramError {
     #[error("{0}")]
     ClapError(#[from] clap::Error),
 
-    #[error("error: Unknown file type")]
+    #[error("Unknown file type")]
     WrongFileType,
 
-    #[error("error: Cannot convert from {0} to {1}")]
+    #[error("Cannot convert from {0} to {1}")]
     InvalidConversion(EmitFormat, EmitFormat),
 
-    #[error("IO error: {0}")]
+    #[error("{0}")]
     IoError(#[from] std::io::Error),
 
     #[error("{0}")]
@@ -63,7 +63,7 @@ enum ProgramError {
     #[error("{0}")]
     DeserializeError(#[from] ron::error::SpannedError),
 
-    #[error("error: {0}")]
+    #[error("{0}")]
     Other(String),
 }
 
@@ -180,7 +180,7 @@ fn main() {
         Ok(()) => {}
         Err(ProgramError::ClapError(e)) => e.exit(),
         Err(e) => {
-            eprintln!("{e}");
+            eprintln!("error: {e}");
             std::process::exit(1);
         }
     }
