@@ -16,19 +16,7 @@ pub struct Hir {
 impl std::fmt::Display for Hir {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let ron = ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::new()).unwrap();
-
-        // This flattens 1D lists of numbers
-        let re = regex::Regex::new(r"\[\s*(?:\d+\s*,\s*)*\d*\s*\]").unwrap();
-        let mut ron = re
-            .replace_all(&ron, |caps: &regex::Captures| {
-                caps[0]
-                    .chars()
-                    .flat_map(|c| [(!c.is_whitespace()).then_some(c), (c == ',').then_some(' ')])
-                    .flatten()
-                    .collect::<String>()
-            })
-            .into_owned();
-        ron = ron.replace(", ]", "]");
+        let ron = crate::generic_ir::flatten_ron_number_lists(&ron);
         write!(f, "{ron}")
     }
 }

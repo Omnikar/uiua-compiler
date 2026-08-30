@@ -195,3 +195,30 @@ where
             .and_then(|x| Function::try_from(x).map_err(D::Error::custom))
     }
 }
+
+/// Post-processes RON to convert
+/// ```
+/// [
+///     1,
+///     2,
+///     3,
+/// ]
+/// ```
+/// into
+/// ```
+/// [1, 2, 3]
+/// ```
+/// while leaving composites of other structures alone.
+pub fn flatten_ron_number_lists(ron: &str) -> String {
+    regex::Regex::new(r"\[\s*(?:\d+\s*,\s*)*\d*\s*\]")
+        .unwrap()
+        .replace_all(ron, |caps: &regex::Captures| {
+            caps[0]
+                .chars()
+                .flat_map(|c| [(!c.is_whitespace()).then_some(c), (c == ',').then_some(' ')])
+                .flatten()
+                .collect::<String>()
+        })
+        .into_owned()
+        .replace(", ]", "]")
+}
