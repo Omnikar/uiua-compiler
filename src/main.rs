@@ -1,10 +1,12 @@
 #![warn(clippy::pedantic)]
 #![allow(
     clippy::items_after_statements,
-    clippy::match_wildcard_for_single_variants
+    clippy::match_wildcard_for_single_variants,
+    clippy::zero_sized_map_values
 )]
 
 mod data_flow;
+mod generic_ir;
 mod hir;
 
 use clap::Parser;

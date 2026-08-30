@@ -1,0 +1,197 @@
+use itertools::Itertools;
+use petgraph::{
+    stable_graph::{NodeIndex, StableDiGraph as Graph},
+    visit::EdgeRef,
+};
+use serde::{Deserialize, Serialize, de::Error};
+use std::collections::HashMap;
+
+pub trait FunctionNode {
+    fn is_input(&self) -> bool;
+    fn is_output(&self) -> bool;
+    fn input() -> Self;
+    fn output() -> Self;
+}
+
+#[derive(Debug, Clone)]
+pub struct Function<Meta, Node, NodeMeta> {
+    pub meta: Meta,
+    pub graph: Graph<Node, (usize, usize)>,
+    pub input_idx: NodeIndex,
+    pub output_idx: NodeIndex,
+    pub node_metas: HashMap<NodeIndex, NodeMeta>,
+    pub spans: HashMap<NodeIndex, usize>,
+}
+impl<Meta, Node, NodeMeta> Function<Meta, Node, NodeMeta> {
+    /// The number of inputs to this function
+    pub fn args_count(&self) -> usize {
+        self.graph
+            .edges_directed(self.input_idx, petgraph::Direction::Incoming)
+            .map(|e| e.weight().0)
+            .max()
+            .map_or(0, |x| x + 1)
+    }
+    /// The number of outputs from this function
+    pub fn outs_count(&self) -> usize {
+        self.graph
+            .edges(self.output_idx)
+            .map(|e| e.weight().1)
+            .max()
+            .map_or(0, |x| x + 1)
+    }
+}
+type FunctionSerializable<Meta, Node, NodeMeta> =
+    (Meta, Vec<(Vec<usize>, Node, Vec<usize>, NodeMeta, usize)>);
+
+impl<Meta, Node, NodeMeta> From<&Function<Meta, Node, NodeMeta>>
+    for FunctionSerializable<Meta, Node, NodeMeta>
+where
+    Meta: Clone,
+    Node: Clone,
+    NodeMeta: Clone + Default,
+{
+    fn from(func: &Function<Meta, Node, NodeMeta>) -> Self {
+        let mut toposort = petgraph::algo::toposort(&func.graph, None)
+            .expect("Compiler generated a cyclic data flow graph. This is a bug.");
+        assert_eq!(toposort[0], func.output_idx);
+        toposort.reverse();
+        assert_eq!(toposort[0], func.input_idx);
+
+        let mut ident_count = 0;
+        let mut idents = HashMap::<(NodeIndex, usize), usize>::new();
+
+        let mut vec = Vec::new();
+
+        for node_idx in toposort {
+            let inputs = func
+                .graph
+                .edges(node_idx)
+                .map(|e| {
+                    let source_node_idx = e.target();
+                    let (out_i, in_i) = *e.weight();
+                    (in_i, idents[&(source_node_idx, out_i)])
+                })
+                .sorted_by_key(|(in_i, _)| *in_i)
+                .map(|(_, x)| x)
+                .collect_vec();
+
+            let output_count = func
+                .graph
+                .edges_directed(node_idx, petgraph::Direction::Incoming)
+                .map(|e| e.weight().0)
+                .max()
+                .map_or(0, |x| x + 1);
+            let mut outputs = Vec::new();
+            for i in 0..output_count {
+                let ident = ident_count;
+                outputs.push(ident);
+                idents.insert((node_idx, i), ident);
+                ident_count += 1;
+            }
+
+            let node = func.graph[node_idx].clone();
+
+            vec.push((
+                outputs,
+                node,
+                inputs,
+                func.node_metas.get(&node_idx).cloned().unwrap_or_default(),
+                func.spans.get(&node_idx).copied().unwrap_or(0),
+            ));
+        }
+
+        (func.meta.clone(), vec)
+    }
+}
+#[derive(thiserror::Error, Debug)]
+pub enum FunctionDeserializeError {
+    #[error("Function definition missing Input line")]
+    MissingInput,
+    #[error("Function definition missing Output line")]
+    MissingOutupt,
+    #[error("Unknown identifier in function definition: {0}")]
+    UnknownIdent(usize),
+}
+impl<Meta, Node, NodeMeta> TryFrom<FunctionSerializable<Meta, Node, NodeMeta>>
+    for Function<Meta, Node, NodeMeta>
+where
+    Node: FunctionNode,
+{
+    type Error = FunctionDeserializeError;
+    fn try_from(data: FunctionSerializable<Meta, Node, NodeMeta>) -> Result<Self, Self::Error> {
+        let mut graph = Graph::<Node, (usize, usize)>::new();
+        let mut node_metas = HashMap::<NodeIndex, NodeMeta>::new();
+        let mut spans = HashMap::<NodeIndex, usize>::new();
+
+        let mut idents = HashMap::<usize, (NodeIndex, usize)>::new();
+
+        let mut instrs = data.1.into_iter();
+        let input_idents = instrs
+            .next()
+            .and_then(|(idents, node, ..)| node.is_input().then_some(idents))
+            .ok_or(FunctionDeserializeError::MissingInput)?;
+
+        let input_idx = graph.add_node(Node::input());
+        for (out_i, ident) in input_idents.into_iter().enumerate() {
+            idents.insert(ident, (input_idx, out_i));
+        }
+
+        for (out_idents, node, in_idents, node_meta, span) in instrs {
+            let is_output = node.is_output();
+
+            let new_node_idx = graph.add_node(node);
+            node_metas.insert(new_node_idx, node_meta);
+            spans.insert(new_node_idx, span);
+            for (in_i, in_ident) in in_idents.into_iter().enumerate() {
+                let (source_node_idx, out_i) = *idents
+                    .get(&in_ident)
+                    .ok_or(FunctionDeserializeError::UnknownIdent(in_ident))?;
+                graph.add_edge(new_node_idx, source_node_idx, (out_i, in_i));
+            }
+            for (out_i, out_ident) in out_idents.into_iter().enumerate() {
+                idents.insert(out_ident, (new_node_idx, out_i));
+            }
+
+            if is_output {
+                return Ok(Self {
+                    meta: data.0,
+                    graph,
+                    input_idx,
+                    output_idx: new_node_idx,
+                    node_metas,
+                    spans,
+                });
+            }
+        }
+
+        Err(FunctionDeserializeError::MissingOutupt)
+    }
+}
+
+impl<Meta, Node, NodeMeta> Serialize for Function<Meta, Node, NodeMeta>
+where
+    Meta: Serialize + Clone,
+    Node: Serialize + Clone,
+    NodeMeta: Serialize + Clone + Default,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        FunctionSerializable::from(self).serialize(serializer)
+    }
+}
+impl<'de, Meta, Node, NodeMeta> Deserialize<'de> for Function<Meta, Node, NodeMeta>
+where
+    Meta: Deserialize<'de>,
+    Node: Deserialize<'de> + FunctionNode,
+    NodeMeta: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        FunctionSerializable::deserialize(deserializer)
+            .and_then(|x| Function::try_from(x).map_err(D::Error::custom))
+    }
+}

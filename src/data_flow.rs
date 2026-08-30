@@ -112,9 +112,11 @@ fn simulate_data_flow(uiua_node: &uiua::Node) -> Result<Function, Error> {
             .add_edge(func_graph.output_idx, node_idx, (out_i, in_i));
     }
     Ok(Function {
+        meta: (),
         graph: func_graph.graph,
         input_idx: func_graph.input_idx,
         output_idx: func_graph.output_idx,
+        node_metas: HashMap::new(),
         spans: func_graph.spans,
     })
 }
