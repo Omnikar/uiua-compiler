@@ -21,17 +21,11 @@ impl std::fmt::Display for Hir {
         let re = regex::Regex::new(r"\[\s*(?:\d+\s*,\s*)*\d*\s*\]").unwrap();
         let mut ron = re
             .replace_all(&ron, |caps: &regex::Captures| {
-                let content = &caps[0];
-                let mut s = String::new();
-                for c in content.chars() {
-                    if !c.is_whitespace() {
-                        s.push(c);
-                        if c == ',' {
-                            s.push(' ');
-                        }
-                    }
-                }
-                s
+                caps[0]
+                    .chars()
+                    .flat_map(|c| [(!c.is_whitespace()).then_some(c), (c == ',').then_some(' ')])
+                    .flatten()
+                    .collect::<String>()
             })
             .into_owned();
         ron = ron.replace(", ]", "]");
