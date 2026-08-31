@@ -27,6 +27,8 @@ struct Args {
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 enum EmitFormat {
+    #[value(skip)]
+    Ua,
     Uasm,
     Dot,
     Hir,
@@ -78,6 +80,7 @@ impl From<String> for ProgramError {
 // As clippy warns, the data contained in these variants are quite large and variable in size, so they are stored behind pointers
 #[derive(Debug)]
 enum LoweringState {
+    Ua(String),
     Uasm(Box<uiua::Assembly>),
     Hir(Box<hir::Hir>),
     Dot(String),
@@ -85,6 +88,7 @@ enum LoweringState {
 impl LoweringState {
     fn cur_format(&self) -> EmitFormat {
         match self {
+            Self::Ua(_) => EmitFormat::Ua,
             Self::Uasm(_) => EmitFormat::Uasm,
             Self::Hir(_) => EmitFormat::Hir,
             Self::Dot(_) => EmitFormat::Dot,
@@ -96,8 +100,13 @@ impl LoweringState {
         use LoweringState as Ls;
         Ok(match (&self, format) {
             _ if self.cur_format() == format => self,
+            (Ls::Ua(ua_text), Ef::Uasm) => Ls::Uasm(Box::new(
+                uiua::Compiler::with_backend(uiua::NativeSys)
+                    .pre_eval_mode(uiua::PreEvalMode::Lazy)
+                    .load_str(ua_text)?
+                    .finish(),
+            )),
             (Ls::Uasm(uasm), Ef::Hir) => Ls::Hir(Box::new(data_flow::construct_hir(uasm)?)),
-            (Ls::Uasm(_), Ef::Dot) => self.convert_to(Ef::Hir)?.convert_to(Ef::Dot)?,
             (Ls::Hir(hir), Ef::Dot) => {
                 let mut result = String::new();
                 for binding in &hir.bindings {
@@ -120,19 +129,22 @@ impl LoweringState {
                 }
                 Self::Dot(result)
             }
+            (Ls::Ua(_), ef) => self.convert_to(Ef::Uasm)?.convert_to(ef)?,
+            (Ls::Uasm(_), Ef::Dot) => self.convert_to(Ef::Hir)?.convert_to(Ef::Dot)?,
             _ => return Err(ProgramError::InvalidConversion(self.cur_format(), format)),
         })
     }
 
     fn write_output(&self, output: &mut dyn Write) -> Result<(), ProgramError> {
+        use LoweringState as Ls;
         match self {
-            LoweringState::Uasm(uasm) => {
+            Ls::Uasm(uasm) => {
                 writeln!(output, "{}", uasm.to_uasm())?;
             }
-            LoweringState::Hir(hir) => {
+            Ls::Hir(hir) => {
                 writeln!(output, "{hir}")?;
             }
-            LoweringState::Dot(s) => {
+            Ls::Ua(s) | Ls::Dot(s) => {
                 writeln!(output, "{s}")?;
             }
         }
@@ -145,12 +157,10 @@ fn run() -> Result<(), ProgramError> {
 
     let path = PathBuf::from(args.filepath);
     let mut state = match path.extension() {
-        Some(ext) if ext == "ua" => LoweringState::Uasm(Box::new(
-            uiua::Compiler::with_backend(uiua::NativeSys)
-                .pre_eval_mode(uiua::PreEvalMode::Lazy)
-                .load_file(&path)?
-                .finish(),
-        )),
+        Some(ext) if ext == "ua" => {
+            let ua_text = std::fs::read_to_string(&path)?;
+            LoweringState::Ua(ua_text)
+        }
         Some(ext) if ext == "uasm" => {
             let uasm_text = std::fs::read_to_string(&path)?;
             LoweringState::Uasm(Box::new(uiua::Assembly::from_uasm(&uasm_text)?))
