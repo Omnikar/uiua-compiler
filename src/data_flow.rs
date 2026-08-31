@@ -9,7 +9,7 @@ pub enum Error {
     // SigCheckError(uiua::SigCheckError),
     #[error("{0}")]
     UiuaError(#[from] uiua::UiuaError),
-    #[error("error: {0}")]
+    #[error("{0}")]
     Other(String),
 }
 
