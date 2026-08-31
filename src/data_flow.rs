@@ -282,6 +282,12 @@ fn process_node(uiua_node: &uiua::Node, func_graph: &mut WorkingFuncGraph) -> Re
             let new_node_idx = func_graph.graph.add_node(Node::Constant(value.clone()));
             func_graph.stack.push((new_node_idx, 0));
         }
+        // --- Unimplemented fillers ---
+        UNode::TrackCaller(sig_node) => {
+            process_node(&sig_node.node, func_graph)?;
+        }
+        UNode::Label(..) | UNode::RemoveLabel(..) => {}
+        // ---
         _ if let Some((node, span)) = {
             match uiua_node {
                 UNode::Prim(prim, span) => Some((Node::FuncPrim(*prim), span)),
