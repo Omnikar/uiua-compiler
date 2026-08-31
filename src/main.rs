@@ -5,10 +5,11 @@
     clippy::zero_sized_map_values
 )]
 
-mod data_flow;
 mod generic_ir;
 mod hir;
 
+/// Simulation of data flow through a program and initial IR construction
+mod data_flow;
 use clap::Parser;
 use std::io::Write;
 use std::path::PathBuf;
@@ -80,7 +81,8 @@ impl From<String> for ProgramError {
 // As clippy warns, the data contained in these variants are quite large and variable in size, so they are stored behind pointers
 #[derive(Debug)]
 enum LoweringState {
-    Ua(String),
+    Ua(PathBuf),
+    UaStr(String),
     Uasm(Box<uiua::Assembly>),
     Hir(Box<hir::Hir>),
     Dot(String),
@@ -88,7 +90,7 @@ enum LoweringState {
 impl LoweringState {
     fn cur_format(&self) -> EmitFormat {
         match self {
-            Self::Ua(_) => EmitFormat::Ua,
+            Self::Ua(_) | Self::UaStr(_) => EmitFormat::Ua,
             Self::Uasm(_) => EmitFormat::Uasm,
             Self::Hir(_) => EmitFormat::Hir,
             Self::Dot(_) => EmitFormat::Dot,
@@ -100,13 +102,21 @@ impl LoweringState {
         use LoweringState as Ls;
         Ok(match (&self, format) {
             _ if self.cur_format() == format => self,
-            (Ls::Ua(ua_text), Ef::Uasm) => Ls::Uasm(Box::new(
+            (Ls::Ua(ua_path), Ef::Uasm) => Ls::Uasm(Box::new(
+                uiua::Compiler::with_backend(uiua::NativeSys)
+                    .pre_eval_mode(uiua::PreEvalMode::Lazy)
+                    .load_file(ua_path)?
+                    .finish(),
+            )),
+            (Ls::UaStr(ua_text), Ef::Uasm) => Ls::Uasm(Box::new(
                 uiua::Compiler::with_backend(uiua::NativeSys)
                     .pre_eval_mode(uiua::PreEvalMode::Lazy)
                     .load_str(ua_text)?
                     .finish(),
             )),
-            (Ls::Uasm(uasm), Ef::Hir) => Ls::Hir(Box::new(data_flow::construct_hir(uasm)?)),
+            (Ls::Uasm(uasm), Ef::Hir) => Ls::Hir(Box::new(hl_opt::perform_passes(
+                data_flow::construct_hir(uasm)?,
+            ))),
             (Ls::Hir(hir), Ef::Dot) => {
                 let mut result = String::new();
                 for binding in &hir.bindings {
@@ -138,13 +148,14 @@ impl LoweringState {
     fn write_output(&self, output: &mut dyn Write) -> Result<(), ProgramError> {
         use LoweringState as Ls;
         match self {
+            Ls::Ua(_) | Ls::UaStr(_) => unreachable!(),
             Ls::Uasm(uasm) => {
                 writeln!(output, "{}", uasm.to_uasm())?;
             }
             Ls::Hir(hir) => {
                 writeln!(output, "{hir}")?;
             }
-            Ls::Ua(s) | Ls::Dot(s) => {
+            Ls::Dot(s) => {
                 writeln!(output, "{s}")?;
             }
         }
@@ -157,10 +168,7 @@ fn run() -> Result<(), ProgramError> {
 
     let path = PathBuf::from(args.filepath);
     let mut state = match path.extension() {
-        Some(ext) if ext == "ua" => {
-            let ua_text = std::fs::read_to_string(&path)?;
-            LoweringState::Ua(ua_text)
-        }
+        Some(ext) if ext == "ua" => LoweringState::Ua(path.clone()),
         Some(ext) if ext == "uasm" => {
             let uasm_text = std::fs::read_to_string(&path)?;
             LoweringState::Uasm(Box::new(uiua::Assembly::from_uasm(&uasm_text)?))

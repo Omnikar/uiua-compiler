@@ -1,12 +1,11 @@
+use itertools::Itertools;
 use std::collections::HashMap;
 
-use itertools::Itertools;
-
-use crate::hir::{Binding, Function, Graph, Hir, Node, NodeIndex};
+use crate::generic_ir::{Graph, NodeIndex};
+use crate::hir::{Binding, Function, Hir, Node};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    // SigCheckError(uiua::SigCheckError),
     #[error("{0}")]
     UiuaError(#[from] uiua::UiuaError),
     #[error("{0}")]
@@ -16,7 +15,7 @@ pub enum Error {
 /// (Node index, output index)
 type Stack = Vec<(NodeIndex, usize)>;
 struct WorkingFuncGraph {
-    graph: Graph<Node, (usize, usize)>,
+    graph: Graph<Node>,
     input_idx: NodeIndex,
     output_idx: NodeIndex,
     stack: Stack,
@@ -111,12 +110,13 @@ fn simulate_data_flow(uiua_node: &uiua::Node) -> Result<Function, Error> {
             .graph
             .add_edge(func_graph.output_idx, node_idx, (out_i, in_i));
     }
+    let node_metas = func_graph.graph.node_indices().map(|k| (k, ())).collect();
     Ok(Function {
         meta: (),
         graph: func_graph.graph,
         input_idx: func_graph.input_idx,
         output_idx: func_graph.output_idx,
-        node_metas: HashMap::new(),
+        node_metas,
         spans: func_graph.spans,
     })
 }

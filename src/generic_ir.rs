@@ -1,11 +1,11 @@
 use bidimap::BiMap;
 use itertools::Itertools;
-use petgraph::{
-    stable_graph::{NodeIndex, StableDiGraph as Graph},
-    visit::{EdgeRef, IntoEdgeReferences, IntoNodeReferences},
-};
+use petgraph::visit::{EdgeRef, IntoEdgeReferences, IntoNodeReferences};
 use serde::{Deserialize, Serialize, de::Error};
 use std::collections::{HashMap, HashSet};
+
+pub use petgraph::stable_graph::NodeIndex;
+pub type Graph<N> = petgraph::stable_graph::StableDiGraph<N, (usize, usize)>;
 
 pub trait FunctionNode {
     fn is_input(&self) -> bool;
@@ -20,7 +20,7 @@ type FunctionSimpleGraph<'a, Node, NodeMeta> =
 #[derive(Debug, Clone)]
 pub struct Function<Meta, Node, NodeMeta> {
     pub meta: Meta,
-    pub graph: Graph<Node, (usize, usize)>,
+    pub graph: Graph<Node>,
     pub input_idx: NodeIndex,
     pub output_idx: NodeIndex,
     pub node_metas: HashMap<NodeIndex, NodeMeta>,
@@ -48,17 +48,20 @@ impl<Meta, Node, NodeMeta> Function<Meta, Node, NodeMeta> {
     ///
     /// Returns the new graph along with a bijective map from the old node indices to the new node indices.
     /// Returns an unstable graph because `petgraph` isomorphism algorithms require their inputs to implement `NodeCompactIndexable`, which stable graphs do not because it is possible for node deletions to leave unused indices.
-    fn simple_graph(
+    pub fn simple_graph(
         &self,
     ) -> (
         FunctionSimpleGraph<'_, Node, NodeMeta>,
-        BiMap<NodeIndex, petgraph::graph::NodeIndex>,
+        BiMap<NodeIndex, NodeIndex>,
     ) {
         let mut new_graph = petgraph::Graph::new();
         let mut node_idx_map = BiMap::new();
         for (node_idx, node) in self.graph.node_references() {
-            let new_idx =
-                new_graph.add_node((node, &self.node_metas[&node_idx], self.spans[&node_idx]));
+            let new_idx = new_graph.add_node((
+                node,
+                &self.node_metas[&node_idx],
+                self.spans.get(&node_idx).copied().unwrap_or_default(),
+            ));
             node_idx_map.insert(node_idx, new_idx);
         }
 
@@ -186,7 +189,7 @@ where
 {
     type Error = FunctionDeserializeError;
     fn try_from(data: FunctionSerializable<Meta, Node, NodeMeta>) -> Result<Self, Self::Error> {
-        let mut graph = Graph::<Node, (usize, usize)>::new();
+        let mut graph = Graph::<Node>::new();
         let mut node_metas = HashMap::<NodeIndex, NodeMeta>::new();
         let mut spans = HashMap::<NodeIndex, usize>::new();
 

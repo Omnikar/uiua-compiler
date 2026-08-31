@@ -2,8 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-pub use petgraph::stable_graph::{NodeIndex, StableDiGraph as Graph};
-
 // TODO: Name this
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Hir {
