@@ -1,10 +1,11 @@
+use bidimap::BiMap;
 use itertools::Itertools;
 use petgraph::{
     stable_graph::{NodeIndex, StableDiGraph as Graph},
-    visit::EdgeRef,
+    visit::{EdgeRef, IntoEdgeReferences, IntoNodeReferences},
 };
 use serde::{Deserialize, Serialize, de::Error};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub trait FunctionNode {
     fn is_input(&self) -> bool;
@@ -12,6 +13,9 @@ pub trait FunctionNode {
     fn input() -> Self;
     fn output() -> Self;
 }
+
+type FunctionSimpleGraph<'a, Node, NodeMeta> =
+    petgraph::Graph<(&'a Node, &'a NodeMeta, usize), HashSet<(usize, usize)>>;
 
 #[derive(Debug, Clone)]
 pub struct Function<Meta, Node, NodeMeta> {
@@ -39,10 +43,73 @@ impl<Meta, Node, NodeMeta> Function<Meta, Node, NodeMeta> {
             .max()
             .map_or(0, |x| x + 1)
     }
+
+    /// Turn the IR graph, which is usually a multigraph, into a simple graph by combining edge weights into `HashSet`s
+    ///
+    /// Returns the new graph along with a bijective map from the old node indices to the new node indices.
+    /// Returns an unstable graph because `petgraph` isomorphism algorithms require their inputs to implement `NodeCompactIndexable`, which stable graphs do not because it is possible for node deletions to leave unused indices.
+    fn simple_graph(
+        &self,
+    ) -> (
+        FunctionSimpleGraph<'_, Node, NodeMeta>,
+        BiMap<NodeIndex, petgraph::graph::NodeIndex>,
+    ) {
+        let mut new_graph = petgraph::Graph::new();
+        let mut node_idx_map = BiMap::new();
+        for (node_idx, node) in self.graph.node_references() {
+            let new_idx =
+                new_graph.add_node((node, &self.node_metas[&node_idx], self.spans[&node_idx]));
+            node_idx_map.insert(node_idx, new_idx);
+        }
+
+        for e in self.graph.edge_references() {
+            let new_source = *node_idx_map.get_by_left(&e.source()).unwrap();
+            let new_target = *node_idx_map.get_by_left(&e.target()).unwrap();
+            let e_idx = if let Some(e) = new_graph.edges_connecting(new_source, new_target).next() {
+                e.id()
+            } else {
+                new_graph.add_edge(new_source, new_target, HashSet::new())
+            };
+            new_graph[e_idx].insert(*e.weight());
+        }
+
+        (new_graph, node_idx_map)
+    }
 }
+
+impl<Meta, Node, NodeMeta> PartialEq for Function<Meta, Node, NodeMeta>
+where
+    Meta: PartialEq,
+    Node: PartialEq + Clone,
+    NodeMeta: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.meta == other.meta && {
+            let (simple_a, map_a) = self.simple_graph();
+            let (simple_b, map_b) = other.simple_graph();
+            map_a.get_by_left(&self.input_idx) == map_b.get_by_left(&other.input_idx)
+                && map_a.get_by_left(&self.output_idx) == map_b.get_by_left(&other.output_idx)
+                && {
+                    petgraph::algo::is_isomorphic_matching(
+                        &simple_a,
+                        &simple_b,
+                        |a, b| a == b,
+                        |a, b| a == b,
+                    )
+                }
+        }
+    }
+}
+impl<Meta, Node, NodeMeta> Eq for Function<Meta, Node, NodeMeta>
+where
+    Meta: Eq,
+    Node: Eq + Clone,
+    NodeMeta: Eq,
+{
+}
+
 type FunctionSerializable<Meta, Node, NodeMeta> =
     (Meta, Vec<(Vec<usize>, Node, Vec<usize>, NodeMeta, usize)>);
-
 impl<Meta, Node, NodeMeta> From<&Function<Meta, Node, NodeMeta>>
     for FunctionSerializable<Meta, Node, NodeMeta>
 where
@@ -126,15 +193,19 @@ where
         let mut idents = HashMap::<usize, (NodeIndex, usize)>::new();
 
         let mut instrs = data.1.into_iter();
-        let input_idents = instrs
+        let (input_idents, input_meta, input_span) = instrs
             .next()
-            .and_then(|(idents, node, ..)| node.is_input().then_some(idents))
+            .and_then(|(idents, node, _, meta, span)| {
+                node.is_input().then_some((idents, meta, span))
+            })
             .ok_or(FunctionDeserializeError::MissingInput)?;
 
         let input_idx = graph.add_node(Node::input());
         for (out_i, ident) in input_idents.into_iter().enumerate() {
             idents.insert(ident, (input_idx, out_i));
         }
+        node_metas.insert(input_idx, input_meta);
+        spans.insert(input_idx, input_span);
 
         for (out_idents, node, in_idents, node_meta, span) in instrs {
             let is_output = node.is_output();

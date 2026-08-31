@@ -9,8 +9,10 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-itertools = "0.15.0"
 thiserror = "2"
+
+bidimap = "0.7.0"
+itertools = "0.15.0"
 
 regex = "1"
 ron = "0.12.2"

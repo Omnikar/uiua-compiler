@@ -38,7 +38,7 @@ pub struct Datadef {
     pub fields: Vec<uiua::Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Node {
     Input,
     Output,
@@ -65,3 +65,35 @@ impl crate::generic_ir::FunctionNode for Node {
 }
 
 pub type Function = crate::generic_ir::Function<(), Node, ()>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ir_comparison() {
+        let func1_s = "
+            ((), [
+                ([0, 1], Input, [], (), 0),
+                ([2], FuncPrim(ADD), [0, 1], (), 0),
+                ([3], FuncPrim(MUL), [0, 1], (), 0),
+                ([4], FuncPrim(SUB), [2, 3], (), 0),
+                ([], Output, [4], (), 0),
+            ])
+        ";
+        let func2_s = "
+            ((), [
+                ([0, 1], Input, [], (), 0),
+                ([2], FuncPrim(MUL), [0, 1], (), 0),
+                ([3], FuncPrim(ADD), [0, 1], (), 0),
+                ([4], FuncPrim(SUB), [3, 2], (), 0),
+                ([], Output, [4], (), 0),
+            ])
+        ";
+
+        let func1: Function = ron::from_str(func1_s).unwrap();
+        let func2: Function = ron::from_str(func2_s).unwrap();
+
+        assert_eq!(func1, func2);
+    }
+}
