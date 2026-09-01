@@ -114,9 +114,7 @@ impl LoweringState {
                     .load_str(ua_text)?
                     .finish(),
             )),
-            (Ls::Uasm(uasm), Ef::Hir) => Ls::Hir(Box::new(hl_opt::perform_passes(
-                data_flow::construct_hir(uasm)?,
-            ))),
+            (Ls::Uasm(uasm), Ef::Hir) => Ls::Hir(Box::new(data_flow::construct_hir(uasm)?)),
             (Ls::Hir(hir), Ef::Dot) => {
                 let mut result = String::new();
                 for binding in &hir.bindings {
