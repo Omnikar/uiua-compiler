@@ -12,7 +12,7 @@ pub enum Error {
     Other(String),
 }
 
-/// (Node index, output index)
+/// (node index, output index)
 type Stack = Vec<(NodeIndex, usize)>;
 struct WorkingFuncGraph {
     graph: Graph<Node>,
