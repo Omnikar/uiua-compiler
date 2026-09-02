@@ -33,7 +33,7 @@ pub struct Datadef {
 
     // We store type annotations as raw Uiua values for now,
     // they will be interpreted later.
-    pub fields: Vec<uiua::Value>,
+    pub fields: Vec<(String, uiua::Value)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
