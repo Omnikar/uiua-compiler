@@ -7,9 +7,13 @@
 
 mod generic_ir;
 mod hir;
+mod mir;
 
 /// Simulation of data flow through a program and initial IR construction
 mod data_flow;
+/// Static analysis of type, rank, and shape
+mod analysis;
+
 use clap::Parser;
 use std::io::Write;
 use std::path::PathBuf;

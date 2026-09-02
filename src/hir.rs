@@ -5,7 +5,8 @@ use std::path::PathBuf;
 // TODO: Name this
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Hir {
-    pub datadefs: Vec<Datadef>,
+    pub structs: Vec<Struct>,
+    pub enums: Vec<Enum>,
     pub bindings: Vec<Binding>,
     pub spans: Vec<uiua::Span>,
     pub files: HashMap<PathBuf, String>,
@@ -28,12 +29,18 @@ pub struct Binding {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Datadef {
+pub struct Struct {
     pub name: String,
 
     // We store type annotations as raw Uiua values for now,
     // they will be interpreted later.
     pub fields: Vec<(String, uiua::Value)>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Enum {
+    pub name: String,
+    pub variants: Vec<Struct>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
