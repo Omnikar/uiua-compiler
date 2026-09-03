@@ -65,6 +65,7 @@ pub enum ValueInfo {
     Map(Box<types::MapInfo>),
     Struct(types::StructInfo),
     Enum(types::EnumInfo),
+    // TODO: File handles, etc?
 }
 
 mod types {
