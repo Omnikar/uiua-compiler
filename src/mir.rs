@@ -102,15 +102,3 @@ mod types {
         variants: Rc<[(String, StructInfo)]>,
     }
 }
-
-fn ababa() {
-    let mut nvars = 0;
-    let shape_n_jagged_array_of_m_by_2_int_arrays =
-        ValueInfo::Array(Box::new(types::ArrayInfo::Ranked {
-            scalar_type: ValueInfo::Array(Box::new(types::ArrayInfo::Ranked {
-                scalar_type: ValueInfo::Int(None),
-                shape: [Expr::new_var(&mut nvars), 2.into()].into(),
-            })),
-            shape: [Expr::new_var(&mut nvars)].into(),
-        }));
-}
