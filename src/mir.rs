@@ -11,6 +11,7 @@ pub struct Mir {
     pub structs: Vec<Struct>,
     pub enums: Vec<Enum>,
     pub bindings: Vec<Binding>,
+    pub main: Option<(Function, usize)>,
     pub spans: Vec<uiua::Span>,
     pub files: HashMap<PathBuf, String>,
 }

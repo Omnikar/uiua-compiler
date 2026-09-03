@@ -64,10 +64,11 @@ impl WorkingFuncGraph {
 }
 
 pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
-    let mut ir = Hir {
+    let mut hir = Hir {
         structs: Vec::new(),
         enums: Vec::new(),
         bindings: Vec::new(),
+        main: None,
         spans: uasm.spans.iter().cloned().collect(),
         files: uasm
             .inputs
@@ -88,7 +89,7 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
                     hash: function.hash(),
                     func: simulate_data_flow(uiua_node)?,
                 };
-                ir.bindings.push(binding);
+                hir.bindings.push(binding);
             }
             Bk::Const(_value) => {
                 // Constants are currently not compiled into the IR
@@ -100,7 +101,12 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
         }
     }
 
-    Ok(ir)
+    if !uasm.root.is_empty() {
+        let func = simulate_data_flow(&uasm.root)?;
+        hir.main = Some((func, uasm.root.span().unwrap_or(0)));
+    }
+
+    Ok(hir)
 }
 
 fn simulate_data_flow(uiua_node: &uiua::Node) -> Result<Function, Error> {
@@ -313,6 +319,7 @@ fn process_node(uiua_node: &uiua::Node, func_graph: &mut WorkingFuncGraph) -> Re
                     ),
                     span,
                 )),
+                UNode::Call(func, span) => Some((Node::Call(func.clone()), span)),
                 _ => None,
             }
         } =>

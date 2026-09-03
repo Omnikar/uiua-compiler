@@ -8,6 +8,7 @@ pub struct Hir {
     pub structs: Vec<Struct>,
     pub enums: Vec<Enum>,
     pub bindings: Vec<Binding>,
+    pub main: Option<(Function, usize)>,
     pub spans: Vec<uiua::Span>,
     pub files: HashMap<PathBuf, String>,
 }
@@ -53,6 +54,7 @@ pub enum Node {
     FuncImplPrim(uiua::ImplPrimitive),
     ModPrim(uiua::Primitive, Vec<Function>),
     ModImplPrim(uiua::ImplPrimitive, Vec<Function>),
+    Call(uiua::Function),
 }
 impl crate::generic_ir::FunctionNode for Node {
     fn is_input(&self) -> bool {
