@@ -6,8 +6,10 @@ use std::path::PathBuf;
 
 use math::Expr;
 
+#[derive(Debug)]
 pub struct Idk;
 
+#[derive(Debug)]
 pub struct Mir {
     pub structs: Vec<Struct>,
     pub enums: Vec<Enum>,
@@ -16,6 +18,7 @@ pub struct Mir {
     pub files: HashMap<PathBuf, String>,
 }
 
+#[derive(Debug)]
 pub struct Binding {
     pub span: uiua::CodeSpan,
     pub func_id: uiua::FunctionId,
@@ -23,16 +26,19 @@ pub struct Binding {
     pub func: Function,
 }
 
+#[derive(Debug)]
 pub struct Struct {
     pub name: String,
     pub info: types::StructInfo,
 }
 
+#[derive(Debug)]
 pub struct Enum {
     pub name: String,
     pub info: types::EnumInfo,
 }
 
+#[derive(Debug)]
 pub enum Node {
     Input,
     Output,
@@ -49,6 +55,7 @@ pub type Function = crate::generic_ir::Function<Idk, Node, Idk>;
 /// Symbolic shape
 pub type SymShape = Vec<math::Expr>;
 
+#[derive(Debug)]
 pub enum ValueInfo {
     Bool(Option<bool>),
     Int(Option<i64>),
@@ -64,11 +71,13 @@ mod types {
     use super::{SymShape, ValueInfo};
     use std::rc::Rc;
 
+    #[derive(Debug)]
     pub struct ArrayValue {
         shape: Vec<usize>,
         data: Vec<ValueInfo>,
     }
 
+    #[derive(Debug)]
     pub enum ArrayInfo {
         /// Exact value known at compile time
         Known {
@@ -89,15 +98,18 @@ mod types {
         },
     }
 
+    #[derive(Debug)]
     pub struct MapInfo {
         key_type: ValueInfo,
         value_type: ValueInfo,
     }
 
+    #[derive(Debug)]
     pub struct StructInfo {
         fields: Rc<[(String, ValueInfo)]>,
     }
 
+    #[derive(Debug)]
     pub struct EnumInfo {
         variants: Rc<[(String, StructInfo)]>,
     }
