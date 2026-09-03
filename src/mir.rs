@@ -7,9 +7,6 @@ use std::path::PathBuf;
 use math::Expr;
 
 #[derive(Debug)]
-pub struct Idk;
-
-#[derive(Debug)]
 pub struct Mir {
     pub structs: Vec<Struct>,
     pub enums: Vec<Enum>,
@@ -50,7 +47,15 @@ pub enum Node {
     // ...
 }
 
-pub type Function = crate::generic_ir::Function<Idk, Node, Idk>;
+pub type NodeMeta = Vec<ValueInfo>;
+
+#[derive(Debug)]
+pub struct FunctionMeta {
+    inputs: Vec<ValueInfo>,
+    outputs: Vec<ValueInfo>,
+}
+
+pub type Function = crate::generic_ir::Function<FunctionMeta, Node, NodeMeta>;
 
 /// Symbolic shape
 pub type SymShape = Vec<math::Expr>;
@@ -68,7 +73,7 @@ pub enum ValueInfo {
     // TODO: File handles, etc?
 }
 
-mod types {
+pub mod types {
     use super::{SymShape, ValueInfo};
     use std::rc::Rc;
 
