@@ -1,10 +1,10 @@
-pub mod math;
+pub mod polynomial;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use math::Expr;
+use polynomial::Expr;
 
 #[derive(Debug)]
 pub struct Mir {
@@ -58,7 +58,7 @@ pub struct FunctionMeta {
 pub type Function = crate::generic_ir::Function<FunctionMeta, Node, NodeMeta>;
 
 /// Symbolic shape
-pub type SymShape = Vec<math::Expr>;
+pub type SymShape = Vec<Expr>;
 
 #[derive(Debug)]
 pub enum ValueInfo {

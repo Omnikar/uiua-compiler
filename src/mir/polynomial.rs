@@ -89,3 +89,26 @@ impl Mul for Expr {
         }
     }
 }
+impl Mul<isize> for Expr {
+    type Output = Self;
+    fn mul(mut self, rhs: isize) -> Self::Output {
+        self.terms.iter_mut().for_each(|(_, coef)| *coef *= rhs);
+        self
+    }
+}
+impl Mul<Expr> for isize {
+    type Output = Expr;
+    fn mul(self, rhs: Expr) -> Self::Output {
+        rhs * self
+    }
+}
+impl std::iter::Product for Expr {
+    fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(1.into(), |x, y| x * y)
+    }
+}
+impl Expr {
+    pub fn pow(self, n: u32) -> Self {
+        std::iter::repeat_n(self, n as usize).product()
+    }
+}
