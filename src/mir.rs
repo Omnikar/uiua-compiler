@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use polynomial::Expr;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Mir {
     pub structs: Vec<Struct>,
     pub enums: Vec<Enum>,
@@ -15,7 +15,7 @@ pub struct Mir {
     pub files: HashMap<PathBuf, String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Binding {
     pub span: uiua::CodeSpan,
     pub func_id: uiua::FunctionId,
@@ -23,19 +23,19 @@ pub struct Binding {
     pub func: Function,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Struct {
     pub name: String,
     pub info: types::StructInfo,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Enum {
     pub name: String,
     pub info: types::EnumInfo,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Node {
     Input,
     Output,
@@ -50,7 +50,7 @@ pub enum Node {
 /// Values output by a node
 pub type NodeMeta = Vec<ValueInfo>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionMeta {
     inputs: Vec<ValueInfo>,
     outputs: Vec<ValueInfo>,
@@ -61,7 +61,7 @@ pub type Function = crate::generic_ir::Function<FunctionMeta, Node, NodeMeta>;
 /// Symbolic shape
 pub type SymShape = Vec<Expr>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ValueInfo {
     Bool(Option<bool>),
     Int(Option<i64>),
@@ -78,13 +78,13 @@ pub mod types {
     use super::{SymShape, ValueInfo};
     use std::rc::Rc;
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct ArrayValue {
         shape: Vec<usize>,
         data: Vec<ValueInfo>,
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub enum ArrayInfo {
         /// Exact value known at compile time
         Known {
@@ -105,18 +105,18 @@ pub mod types {
         },
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct MapInfo {
         key_type: ValueInfo,
         value_type: ValueInfo,
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct StructInfo {
         fields: Rc<[(String, ValueInfo)]>,
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct EnumInfo {
         variants: Rc<[(String, StructInfo)]>,
     }
