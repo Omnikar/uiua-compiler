@@ -47,6 +47,7 @@ pub enum Node {
     // ...
 }
 
+/// Values output by a node
 pub type NodeMeta = Vec<ValueInfo>;
 
 #[derive(Debug)]
