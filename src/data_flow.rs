@@ -145,6 +145,9 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
         use uiua::BindingKind as Bk;
         match &binding_info.kind {
             Bk::Func(function) => {
+                if ignored_bindings.contains(&function.index()) {
+                    continue;
+                }
                 let uiua_node = &uasm[function];
                 let binding = Binding {
                     span: binding_info.span.clone(),
