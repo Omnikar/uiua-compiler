@@ -78,25 +78,9 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
             .collect(),
     };
 
-    for binding_info in &uasm.bindings {
-        use uiua::BindingKind as Bk;
-        match &binding_info.kind {
-            Bk::Func(function) => {
-                let uiua_node = &uasm[function];
-                let binding = Binding {
-                    span: binding_info.span.clone(),
-                    func_id: function.id.clone(),
-                    hash: function.hash(),
-                    func: simulate_data_flow(uiua_node)?,
-                };
-                hir.bindings.push(binding);
-            }
-            Bk::Const(_value) => {
-                // Constants are currently not compiled into the IR
-            }
-            _ => {}
-        }
-    }
+    // Bindings are indexed with usize
+    let mut ignored_bindings: Vec<usize> = Vec::new();
+
     use uiua::BindingKind as Bk;
     use uiua::LocalIndex;
     for (exp_name, exp_index) in &*uasm.exports {
@@ -118,15 +102,35 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
             && let Bk::Const(Some(uiua::Value::Box(fields_array))) =
                 &uasm.bindings[fields_const_index].kind
         {
+            if let Some(LocalIndex {
+                index: new_fn_index,
+                ..
+            }) = module
+                .names
+                .get_only("New", uiua::LookupPreference::Function, uasm)
+            {
+                ignored_bindings.push(new_fn_index);
+            }
             let mut struct_def = Struct {
                 name: exp_name.into(),
                 fields: Vec::new(),
             };
             for (elem_name, elem_type) in fields_array.data().iter().zip(type_array.data()) {
                 if let uiua::Value::Char(name_arr) = elem_name.as_ref() {
+                    let name_str: String = name_arr.elements().collect();
+                    if let Some(LocalIndex {
+                        index: field_fn_index,
+                        ..
+                    }) = module.names.get_only(
+                        name_str.as_str(),
+                        uiua::LookupPreference::Function,
+                        uasm,
+                    ) {
+                        ignored_bindings.push(field_fn_index);
+                    }
                     struct_def
                         .fields
-                        .push((name_arr.elements().collect(), elem_type.as_ref().clone()));
+                        .push((name_str, elem_type.as_ref().clone()));
                 }
             }
         }
@@ -135,6 +139,26 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
     if !uasm.root.is_empty() {
         let func = simulate_data_flow(&uasm.root)?;
         hir.main = Some((func, uasm.root.span().unwrap_or(0)));
+    }
+
+    for binding_info in &uasm.bindings {
+        use uiua::BindingKind as Bk;
+        match &binding_info.kind {
+            Bk::Func(function) => {
+                let uiua_node = &uasm[function];
+                let binding = Binding {
+                    span: binding_info.span.clone(),
+                    func_id: function.id.clone(),
+                    hash: function.hash(),
+                    func: simulate_data_flow(uiua_node)?,
+                };
+                hir.bindings.push(binding);
+            }
+            Bk::Const(_value) => {
+                // Constants are currently not compiled into the IR
+            }
+            _ => {}
+        }
     }
 
     Ok(hir)
