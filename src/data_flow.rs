@@ -2,7 +2,7 @@ use itertools::Itertools;
 use std::collections::HashMap;
 
 use crate::generic_ir::{Graph, NodeIndex};
-use crate::hir::{Binding, Function, Hir, Node};
+use crate::hir::{Binding, Function, Hir, Node, Struct};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -94,10 +94,41 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
             Bk::Const(_value) => {
                 // Constants are currently not compiled into the IR
             }
-            Bk::Module(_module) => {
-                // TOOD: Maybe datadef detection happens here?
-            }
             _ => {}
+        }
+    }
+    use uiua::BindingKind as Bk;
+    use uiua::LocalIndex;
+    for (exp_name, exp_index) in &*uasm.exports {
+        if let Bk::Module(module) = &uasm.bindings[*exp_index].kind
+            && let Some(LocalIndex {
+                index: type_const_index,
+                ..
+            }) = module
+                .names
+                .get_only("t", uiua::LookupPreference::Function, uasm)
+            && let Some(LocalIndex {
+                index: fields_const_index,
+                ..
+            }) = module
+                .names
+                .get_only("t", uiua::LookupPreference::Function, uasm)
+            && let Bk::Const(Some(uiua::Value::Box(type_array))) =
+                &uasm.bindings[type_const_index].kind
+            && let Bk::Const(Some(uiua::Value::Box(fields_array))) =
+                &uasm.bindings[fields_const_index].kind
+        {
+            let mut struct_def = Struct {
+                name: exp_name.into(),
+                fields: Vec::new(),
+            };
+            for (elem_name, elem_type) in fields_array.data().iter().zip(type_array.data()) {
+                if let uiua::Value::Char(name_arr) = elem_name.as_ref() {
+                    struct_def
+                        .fields
+                        .push((name_arr.elements().collect(), elem_type.as_ref().clone()));
+                }
+            }
         }
     }
 
