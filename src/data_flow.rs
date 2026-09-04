@@ -112,7 +112,7 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
                 ..
             }) = module
                 .names
-                .get_only("t", uiua::LookupPreference::Function, uasm)
+                .get_only("Fields", uiua::LookupPreference::Function, uasm)
             && let Bk::Const(Some(uiua::Value::Box(type_array))) =
                 &uasm.bindings[type_const_index].kind
             && let Bk::Const(Some(uiua::Value::Box(fields_array))) =
