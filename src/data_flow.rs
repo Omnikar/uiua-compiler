@@ -111,6 +111,15 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
             {
                 ignored_bindings.push(new_fn_index);
             }
+            if let Some(LocalIndex {
+                index: noinit_fn_index,
+                ..
+            }) = module
+                .names
+                .get_only("NoInit", uiua::LookupPreference::Function, uasm)
+            {
+                ignored_bindings.push(noinit_fn_index);
+            }
             let mut struct_def = Struct {
                 name: exp_name.into(),
                 fields: Vec::new(),
