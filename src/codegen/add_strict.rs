@@ -108,7 +108,7 @@ pub fn build_array_add_strict<'ctx>(
     rank: u32,
 ) -> FunctionValue<'ctx> {
     let fn_type = ptr_type.fn_type(&[ptr_type.into(), ptr_type.into()], false);
-    let function = module.add_function("array_add_strict", fn_type, None);
+    let function = module.add_function(format!("array_add_strict{}", rank).as_str(), fn_type, None);
 
     let entry = context.append_basic_block(function, "entry");
     let mismatch_bb = context.append_basic_block(function, "shape_mismatch");
