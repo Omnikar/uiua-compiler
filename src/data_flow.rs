@@ -70,6 +70,44 @@ fn get_module_fn_index(name: &str, module: &uiua::Module, uasm: &uiua::Assembly)
         .map(|li| li.index)
 }
 
+fn struct_from_module(
+    name: &str,
+    module: &uiua::Module,
+    uasm: &uiua::Assembly,
+) -> Option<(HashSet<usize>, Struct)> {
+    let mut ignored_bindings: HashSet<usize> = HashSet::new();
+    use uiua::BindingKind as Bk;
+    if let Some(type_const_index) = get_module_fn_index("t", module, uasm)
+        && let Some(fields_const_index) = get_module_fn_index("Fields", module, uasm)
+        && let Bk::Const(Some(uiua::Value::Box(type_array))) = &uasm.bindings[type_const_index].kind
+        && let Bk::Const(Some(uiua::Value::Box(fields_array))) =
+            &uasm.bindings[fields_const_index].kind
+    {
+        ignored_bindings.extend(
+            ["New", "NoInit"]
+                .into_iter()
+                .filter_map(|name| get_module_fn_index(name, module, uasm)),
+        );
+        let mut struct_def = Struct {
+            name: name.into(),
+            fields: Vec::new(),
+        };
+        for (elem_name, elem_type) in fields_array.data().iter().zip(type_array.data()) {
+            if let uiua::Value::Char(name_arr) = elem_name.as_ref() {
+                let name_str: String = name_arr.elements().collect();
+                if let Some(field_fn_index) = get_module_fn_index(&name_str, module, uasm) {
+                    ignored_bindings.insert(field_fn_index);
+                }
+                struct_def
+                    .fields
+                    .push((name_str, elem_type.as_ref().clone()));
+            }
+        }
+        Some((ignored_bindings, struct_def))
+    } else {
+        None
+    }
+}
 fn collect_structs(uasm: &uiua::Assembly, hir: &mut Hir) -> HashSet<usize> {
     // Bindings are indexed with usize
     let mut ignored_bindings: HashSet<usize> = HashSet::new();
@@ -77,34 +115,10 @@ fn collect_structs(uasm: &uiua::Assembly, hir: &mut Hir) -> HashSet<usize> {
     use uiua::BindingKind as Bk;
     for (exp_name, exp_index) in &*uasm.exports {
         if let Bk::Module(module) = &uasm.bindings[*exp_index].kind
-            && let Some(type_const_index) = get_module_fn_index("t", module, uasm)
-            && let Some(fields_const_index) = get_module_fn_index("Fields", module, uasm)
-            && let Bk::Const(Some(uiua::Value::Box(type_array))) =
-                &uasm.bindings[type_const_index].kind
-            && let Bk::Const(Some(uiua::Value::Box(fields_array))) =
-                &uasm.bindings[fields_const_index].kind
+            && let Some((ignored, struct_def)) = struct_from_module(exp_name, module, uasm)
         {
-            ignored_bindings.extend(
-                ["New", "NoInit"]
-                    .into_iter()
-                    .filter_map(|name| get_module_fn_index(name, module, uasm)),
-            );
-            let mut struct_def = Struct {
-                name: exp_name.into(),
-                fields: Vec::new(),
-            };
-            for (elem_name, elem_type) in fields_array.data().iter().zip(type_array.data()) {
-                if let uiua::Value::Char(name_arr) = elem_name.as_ref() {
-                    let name_str: String = name_arr.elements().collect();
-                    if let Some(field_fn_index) = get_module_fn_index(&name_str, module, uasm) {
-                        ignored_bindings.insert(field_fn_index);
-                    }
-                    struct_def
-                        .fields
-                        .push((name_str, elem_type.as_ref().clone()));
-                }
-            }
             hir.structs.push(struct_def);
+            ignored_bindings.extend(&ignored);
         }
     }
     ignored_bindings
