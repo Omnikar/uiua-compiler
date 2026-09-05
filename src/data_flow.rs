@@ -142,6 +142,7 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
                         .push((name_str, elem_type.as_ref().clone()));
                 }
             }
+            hir.structs.push(struct_def);
         }
     }
 
