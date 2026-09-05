@@ -148,6 +148,80 @@ fn build_element_count<'ctx>(
 // TODO: find out where the actual primitive implementations are gonna go
 // TODO: implement the primitives...
 // TODO: Make an allocator for new HADs
+fn build_new_heap_array<'ctx>(
+    builder: &Builder<'ctx>,
+    descriptor_type: StructType<'ctx>,
+    size_type: IntType<'ctx>,
+    elem_type: inkwell::types::IntType<'ctx>,
+    rank: u32,
+    count: IntValue<'ctx>,
+    // Should this function calculate `count` from the other given params using build_element_count()?
+    src_dims_ptr: PointerValue<'ctx>,
+) -> PointerValue<'ctx> {
+    // I've decided to heap-allocate the descriptor as well as the data buffer
+    // TODO: Add support for a reference count field
+    let result = builder.build_malloc(descriptor_type, "result").unwrap();
+
+    // buf = malloc(count * sizeof(elem))
+    let buf = builder
+        .build_array_malloc(elem_type, count, "result_buf_alloc")
+        .unwrap();
+
+    // store buf ptr
+    let buf_field = builder
+        .build_struct_gep(descriptor_type, result, 0, "result_buf_field")
+        .unwrap();
+    builder.build_store(buf_field, buf).unwrap();
+
+    // offset = 0
+    let offset_field = builder
+        .build_struct_gep(descriptor_type, result, 1, "result_offset_field")
+        .unwrap();
+    builder
+        .build_store(offset_field, size_type.const_int(0, false))
+        .unwrap();
+
+    // copy src_dims into result.dims
+    let dims_field = builder
+        .build_struct_gep(descriptor_type, result, 3, "result_dims_field")
+        .unwrap();
+    let mut dim_values = Vec::with_capacity(rank as usize);
+    for i in 0..rank {
+        let v = build_load_dim(builder, size_type, rank, src_dims_ptr, i, "src_copy");
+        build_store_dim(builder, size_type, rank, dims_field, i, v, "result_dims");
+        dim_values.push(v);
+    }
+
+    let strides_field = builder
+        .build_struct_gep(descriptor_type, result, 2, "result_strides_field")
+        .unwrap();
+    let mut running = size_type.const_int(1, false);
+    // Last axis has stride 1; walk backwards accumulating products of trailing dims
+    // Stride for dim i is the product of all trailing dims, hence the .rev()
+    let mut strides = vec![size_type.const_int(1, false); rank as usize];
+    for i in (0..rank).rev() {
+        strides[i as usize] = running;
+        if i != 0 {
+            running = builder
+                .build_int_mul(running, dim_values[i as usize], "stride_acc")
+                .unwrap();
+        }
+    }
+    for i in 0..rank {
+        build_store_dim(
+            builder,
+            size_type,
+            rank,
+            strides_field,
+            i,
+            strides[i as usize],
+            "result_strides",
+        );
+    }
+
+    result
+}
+
 // TODO: Find out where the actual primitive implementations are gonna go
 // TODO: Implement the primitives...
 
