@@ -8,8 +8,3 @@ use inkwell::{AddressSpace, OptimizationLevel};
 
 mod heap_array;
 mod add;
-
-        .unwrap();
-        .unwrap();
-}
-
