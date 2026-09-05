@@ -1,26 +1,23 @@
-use std::path::Path;
+use std::collections::HashMap;
 
+use inkwell::builder::Builder;
 use inkwell::context::Context;
-use inkwell::targets::{
-    CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetTriple,
-};
 use inkwell::types::{IntType, PointerType, StructType};
-use inkwell::values::{FunctionValue, IntValue, PointerValue};
-use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
+use inkwell::values::{IntValue, PointerValue};
 
 /// Container for the various HAD types (we'll need one per array rank)
-struct HeapArrayDescriptorTypes<'ctx> {
+pub(super) struct HeapArrayDescriptorTypes<'ctx> {
     descriptors: HashMap<u32, StructType<'ctx>>,
 }
 
 impl<'ctx> HeapArrayDescriptorTypes<'ctx> {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             descriptors: HashMap::new(),
         }
     }
 
-    fn get(
+    pub(super) fn get(
         &mut self,
         context: &'ctx Context,
         ptr_type: PointerType<'ctx>,
@@ -45,7 +42,7 @@ impl<'ctx> HeapArrayDescriptorTypes<'ctx> {
 }
 
 /// Read from a HAD's dims array
-fn build_load_dim<'ctx>(
+pub(super) fn build_load_dim<'ctx>(
     builder: &Builder<'ctx>,
     size_type: IntType<'ctx>,
     rank: u32,
@@ -77,7 +74,7 @@ fn build_load_dim<'ctx>(
 }
 
 /// Write to a HAD's dims array
-fn build_store_dim<'ctx>(
+pub(super) fn build_store_dim<'ctx>(
     builder: &Builder<'ctx>,
     size_type: IntType<'ctx>,
     rank: u32,
@@ -104,7 +101,7 @@ fn build_store_dim<'ctx>(
 }
 
 /// Load a HAD's buffer address
-fn build_load_buf<'ctx>(
+pub(super) fn build_load_buf<'ctx>(
     builder: &Builder<'ctx>,
     descriptor_type: StructType<'ctx>,
     ptr_type: PointerType<'ctx>,
@@ -121,7 +118,7 @@ fn build_load_buf<'ctx>(
 }
 
 /// Compute array length = product of dims
-fn build_element_count<'ctx>(
+pub(super) fn build_element_count<'ctx>(
     builder: &Builder<'ctx>,
     size_type: IntType<'ctx>,
     rank: u32,
@@ -141,11 +138,7 @@ fn build_element_count<'ctx>(
     accumulator
 }
 
-// TODO: make an allocator for new HADs
-// TODO: find out where the actual primitive implementations are gonna go
-// TODO: implement the primitives...
-// TODO: Make an allocator for new HADs
-fn build_new_heap_array<'ctx>(
+pub(super) fn build_new_heap_array<'ctx>(
     builder: &Builder<'ctx>,
     descriptor_type: StructType<'ctx>,
     size_type: IntType<'ctx>,
@@ -173,10 +166,6 @@ fn build_new_heap_array<'ctx>(
     // offset = 0
     let offset_field = builder
         .build_struct_gep(descriptor_type, result, 1, "result_offset_field")
-use inkwell::{AddressSpace, OptimizationLevel};
-
-mod heap_array;
-mod add;
         .unwrap();
     builder
         .build_store(offset_field, size_type.const_int(0, false))
@@ -222,7 +211,3 @@ mod add;
 
     result
 }
-
-// TODO: Find out where the actual primitive implementations are gonna go
-// TODO: Implement the primitives...
-
