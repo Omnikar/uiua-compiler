@@ -211,3 +211,5 @@ pub(super) fn build_new_heap_array<'ctx>(
 
     result
 }
+
+// TODO: add support for buffer content typing
