@@ -1,8 +1,8 @@
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::generic_ir::{Graph, NodeIndex};
-use crate::hir::{Binding, Function, Hir, Node};
+use crate::hir::{Binding, Function, Hir, Node, Struct};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -63,6 +63,53 @@ impl WorkingFuncGraph {
     }
 }
 
+fn get_module_fn_index(name: &str, module: &uiua::Module, uasm: &uiua::Assembly) -> Option<usize> {
+    module
+        .names
+        .get_only(name, uiua::LookupPreference::Function, uasm)
+        .map(|li| li.index)
+}
+
+fn collect_structs(uasm: &uiua::Assembly, hir: &mut Hir) -> HashSet<usize> {
+    // Bindings are indexed with usize
+    let mut ignored_bindings: HashSet<usize> = HashSet::new();
+
+    use uiua::BindingKind as Bk;
+    for (exp_name, exp_index) in &*uasm.exports {
+        if let Bk::Module(module) = &uasm.bindings[*exp_index].kind
+            && let Some(type_const_index) = get_module_fn_index("t", module, uasm)
+            && let Some(fields_const_index) = get_module_fn_index("Fields", module, uasm)
+            && let Bk::Const(Some(uiua::Value::Box(type_array))) =
+                &uasm.bindings[type_const_index].kind
+            && let Bk::Const(Some(uiua::Value::Box(fields_array))) =
+                &uasm.bindings[fields_const_index].kind
+        {
+            ignored_bindings.extend(
+                ["New", "NoInit"]
+                    .into_iter()
+                    .filter_map(|name| get_module_fn_index(name, module, uasm)),
+            );
+            let mut struct_def = Struct {
+                name: exp_name.into(),
+                fields: Vec::new(),
+            };
+            for (elem_name, elem_type) in fields_array.data().iter().zip(type_array.data()) {
+                if let uiua::Value::Char(name_arr) = elem_name.as_ref() {
+                    let name_str: String = name_arr.elements().collect();
+                    if let Some(field_fn_index) = get_module_fn_index(&name_str, module, uasm) {
+                        ignored_bindings.insert(field_fn_index);
+                    }
+                    struct_def
+                        .fields
+                        .push((name_str, elem_type.as_ref().clone()));
+                }
+            }
+            hir.structs.push(struct_def);
+        }
+    }
+    ignored_bindings
+}
+
 pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
     let mut hir = Hir {
         structs: Vec::new(),
@@ -78,10 +125,12 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
             .collect(),
     };
 
-    for binding_info in &uasm.bindings {
+    let ignored_bindings = collect_structs(uasm, &mut hir);
+
+    for (binding_idx, binding_info) in uasm.bindings.iter().enumerate() {
         use uiua::BindingKind as Bk;
         match &binding_info.kind {
-            Bk::Func(function) => {
+            Bk::Func(function) if !ignored_bindings.contains(&binding_idx) => {
                 let uiua_node = &uasm[function];
                 let binding = Binding {
                     span: binding_info.span.clone(),
@@ -94,13 +143,9 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
             Bk::Const(_value) => {
                 // Constants are currently not compiled into the IR
             }
-            Bk::Module(_module) => {
-                // TOOD: Maybe datadef detection happens here?
-            }
             _ => {}
         }
     }
-
     if !uasm.root.is_empty() {
         let func = simulate_data_flow(&uasm.root)?;
         hir.main = Some((func, uasm.root.span().unwrap_or(0)));
