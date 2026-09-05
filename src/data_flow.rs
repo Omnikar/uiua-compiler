@@ -84,12 +84,11 @@ fn collect_structs(uasm: &uiua::Assembly, hir: &mut Hir) -> HashSet<usize> {
             && let Bk::Const(Some(uiua::Value::Box(fields_array))) =
                 &uasm.bindings[fields_const_index].kind
         {
-            if let Some(new_fn_index) = get_module_fn_index("New", module, uasm) {
-                ignored_bindings.insert(new_fn_index);
-            }
-            if let Some(noinit_fn_index) = get_module_fn_index("NoInit", module, uasm) {
-                ignored_bindings.insert(noinit_fn_index);
-            }
+            ignored_bindings.extend(
+                ["New", "NoInit"]
+                    .into_iter()
+                    .filter_map(|name| get_module_fn_index(name, module, uasm)),
+            );
             let mut struct_def = Struct {
                 name: exp_name.into(),
                 fields: Vec::new(),
