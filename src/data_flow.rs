@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::generic_ir::{Graph, NodeIndex};
 use crate::hir::{Binding, Function, Hir, Node, Struct};
@@ -63,23 +63,9 @@ impl WorkingFuncGraph {
     }
 }
 
-pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
-    let mut hir = Hir {
-        structs: Vec::new(),
-        enums: Vec::new(),
-        bindings: Vec::new(),
-        main: None,
-        spans: uasm.spans.iter().cloned().collect(),
-        files: uasm
-            .inputs
-            .files
-            .iter()
-            .map(|entry| (entry.key().clone(), entry.value().to_string()))
-            .collect(),
-    };
-
+fn collect_structs(uasm: &uiua::Assembly, hir: &mut Hir) -> HashSet<usize> {
     // Bindings are indexed with usize
-    let mut ignored_bindings: Vec<usize> = Vec::new();
+    let mut ignored_bindings: HashSet<usize> = HashSet::new();
 
     use uiua::{BindingKind as Bk, LocalIndex};
     for (exp_name, exp_index) in &*uasm.exports {
@@ -108,7 +94,7 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
                 .names
                 .get_only("New", uiua::LookupPreference::Function, uasm)
             {
-                ignored_bindings.push(new_fn_index);
+                ignored_bindings.insert(new_fn_index);
             }
             if let Some(LocalIndex {
                 index: noinit_fn_index,
@@ -117,7 +103,7 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
                 .names
                 .get_only("NoInit", uiua::LookupPreference::Function, uasm)
             {
-                ignored_bindings.push(noinit_fn_index);
+                ignored_bindings.insert(noinit_fn_index);
             }
             let mut struct_def = Struct {
                 name: exp_name.into(),
@@ -134,7 +120,7 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
                         uiua::LookupPreference::Function,
                         uasm,
                     ) {
-                        ignored_bindings.push(field_fn_index);
+                        ignored_bindings.insert(field_fn_index);
                     }
                     struct_def
                         .fields
@@ -144,6 +130,25 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
             hir.structs.push(struct_def);
         }
     }
+    ignored_bindings
+}
+
+pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
+    let mut hir = Hir {
+        structs: Vec::new(),
+        enums: Vec::new(),
+        bindings: Vec::new(),
+        main: None,
+        spans: uasm.spans.iter().cloned().collect(),
+        files: uasm
+            .inputs
+            .files
+            .iter()
+            .map(|entry| (entry.key().clone(), entry.value().to_string()))
+            .collect(),
+    };
+
+    let ignored_bindings = collect_structs(uasm, &mut hir);
 
     for (binding_idx, binding_info) in uasm.bindings.iter().enumerate() {
         use uiua::BindingKind as Bk;
