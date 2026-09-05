@@ -13,8 +13,6 @@ mod heap_array;
 use heap_array::HeapArrayDescriptorTypes;
 
 pub(crate) fn codegen() {
-    const RANK: u32 = 2;
-
     let context = Context::create();
     let module = context.create_module("test_mod");
     let builder = context.create_builder();
@@ -24,20 +22,21 @@ pub(crate) fn codegen() {
     let ptr_type = context.ptr_type(AddressSpace::default());
 
     let mut type_cache = HeapArrayDescriptorTypes::new();
-    let descriptor_type = type_cache.get(&context, ptr_type, size_type, RANK);
+    for rank in 1..8 {
+        let descriptor_type = type_cache.get(&context, ptr_type, size_type, rank);
 
-    let function = build_array_add_strict(
-        &context,
-        &module,
-        &builder,
-        descriptor_type,
-        ptr_type,
-        size_type,
-        elem_type,
-        RANK,
-    );
-    assert!(function.verify(true));
-
+        let function = build_array_add_strict(
+            &context,
+            &module,
+            &builder,
+            descriptor_type,
+            ptr_type,
+            size_type,
+            elem_type,
+            rank,
+        );
+        assert!(function.verify(true));
+    }
     Target::initialize_all(&InitializationConfig::default());
     let triple = TargetTriple::create("aarch64-apple-darwin26.0.0");
     let target = Target::from_triple(&triple).unwrap();
