@@ -78,8 +78,7 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
     // Bindings are indexed with usize
     let mut ignored_bindings: Vec<usize> = Vec::new();
 
-    use uiua::BindingKind as Bk;
-    use uiua::LocalIndex;
+    use uiua::{BindingKind as Bk, LocalIndex};
     for (exp_name, exp_index) in &*uasm.exports {
         if let Bk::Module(module) = &uasm.bindings[*exp_index].kind
             && let Some(LocalIndex {
@@ -142,18 +141,11 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
             hir.structs.push(struct_def);
         }
     }
-    if !uasm.root.is_empty() {
-        let func = simulate_data_flow(&uasm.root)?;
-        hir.main = Some((func, uasm.root.span().unwrap_or(0)));
-    }
 
     for (binding_idx, binding_info) in uasm.bindings.iter().enumerate() {
         use uiua::BindingKind as Bk;
         match &binding_info.kind {
-            Bk::Func(function) => {
-                if ignored_bindings.contains(&binding_idx) {
-                    continue;
-                }
+            Bk::Func(function) if !ignored_bindings.contains(&binding_idx) => {
                 let uiua_node = &uasm[function];
                 let binding = Binding {
                     span: binding_info.span.clone(),
@@ -168,6 +160,10 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
             }
             _ => {}
         }
+    }
+    if !uasm.root.is_empty() {
+        let func = simulate_data_flow(&uasm.root)?;
+        hir.main = Some((func, uasm.root.span().unwrap_or(0)));
     }
 
     Ok(hir)
