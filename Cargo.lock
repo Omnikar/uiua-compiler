@@ -3093,7 +3093,7 @@ checksum = "2896d95c02a80c6d6a5d6e953d479f5ddf2dfdb6a244441010e373ac0fb88971"
 [[package]]
 name = "uiua"
 version = "0.19.1"
-source = "git+https://github.com/uiua-lang/uiua#091313dc8c751459c806edeb704967835cb7558a"
+source = "git+https://github.com/Omnikar/uiua?branch=ron-compatible#75872b1542f28cad6589b66afe09a6875ebc7012"
 dependencies = [
  "arboard",
  "bitflags 2.13.1",
@@ -3177,7 +3177,7 @@ dependencies = [
 [[package]]
 name = "uiua_parser"
 version = "0.19.1"
-source = "git+https://github.com/uiua-lang/uiua#091313dc8c751459c806edeb704967835cb7558a"
+source = "git+https://github.com/Omnikar/uiua?branch=ron-compatible#75872b1542f28cad6589b66afe09a6875ebc7012"
 dependencies = [
  "bytemuck",
  "colored",

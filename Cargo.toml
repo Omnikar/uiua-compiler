@@ -21,4 +21,4 @@ serde = "1"
 inkwell = { version = "0.10.0", features = ["llvm22-1"] }
 petgraph = "0.8.3"
 
-uiua = { git = "https://github.com/uiua-lang/uiua" }
+uiua = { git = "https://github.com/Omnikar/uiua", branch = "ron-compatible" }
