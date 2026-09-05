@@ -28,11 +28,11 @@ impl<'ctx> HeapArrayDescriptorTypes<'ctx> {
         context: &'ctx Context,
         ptr_type: PointerType<'ctx>,
         size_type: IntType<'ctx>,
-        rank: u32, // please never have an array with over 4 billion dimensions
+        rank: u32, // Please never have an array with over 4 billion dimensions
     ) -> StructType<'ctx> {
         *self.descriptors.entry(rank).or_insert_with(|| {
             let name = format!("HeapArrayDescriptor{rank}");
-            let ty = context.opaque_struct_type(&name); // name the struct
+            let ty = context.opaque_struct_type(&name); // Name the struct
             ty.set_body(
                 &[
                     ptr_type.into(),                   // buf
@@ -47,7 +47,7 @@ impl<'ctx> HeapArrayDescriptorTypes<'ctx> {
     }
 }
 
-/// read from a HAD's dims array
+/// Read from a HAD's dims array
 fn build_load_dim<'ctx>(
     builder: &Builder<'ctx>,
     size_type: IntType<'ctx>,
@@ -59,10 +59,10 @@ fn build_load_dim<'ctx>(
     let array_type = size_type.array_type(rank);
     let zero = size_type.const_int(0, false);
     let idx = size_type.const_int(i as u64, false);
-    // TODO: figure out how we're gonna end up doing the sizing of these types
+    // TODO: Figure out how we're gonna end up doing the sizing of these types
 
     let elem_ptr = unsafe {
-        // "GEP is very likely to segfault if indexes are used incorrectly" but i'm pretty sure this works
+        // "GEP is very likely to segfault if indexes are used incorrectly" but I'm pretty sure this works
         builder
             .build_gep(
                 // get element pointer
@@ -79,7 +79,7 @@ fn build_load_dim<'ctx>(
         .into_int_value()
 }
 
-/// write to a HAD's dims array
+/// Write to a HAD's dims array
 fn build_store_dim<'ctx>(
     builder: &Builder<'ctx>,
     size_type: IntType<'ctx>,
@@ -93,7 +93,7 @@ fn build_store_dim<'ctx>(
     let zero = size_type.const_int(0, false);
     let idx = size_type.const_int(i as u64, false);
     let elem_ptr = unsafe {
-        // "GEP is very likely to segfault if indexes are used incorrectly" but i'm pretty sure this works
+        // "GEP is very likely to segfault if indexes are used incorrectly" but I'm pretty sure this works
         builder
             .build_gep(
                 array_type,
@@ -106,7 +106,7 @@ fn build_store_dim<'ctx>(
     builder.build_store(elem_ptr, value).unwrap();
 }
 
-/// load a HAD's buffer address
+/// Load a HAD's buffer address
 fn build_load_buf<'ctx>(
     builder: &Builder<'ctx>,
     descriptor_type: StructType<'ctx>,
@@ -123,7 +123,7 @@ fn build_load_buf<'ctx>(
         .into_pointer_value()
 }
 
-/// compute array length = product of dims
+/// Compute array length = product of dims
 fn build_element_count<'ctx>(
     builder: &Builder<'ctx>,
     size_type: IntType<'ctx>,
@@ -147,4 +147,7 @@ fn build_element_count<'ctx>(
 // TODO: make an allocator for new HADs
 // TODO: find out where the actual primitive implementations are gonna go
 // TODO: implement the primitives...
+// TODO: Make an allocator for new HADs
+// TODO: Find out where the actual primitive implementations are gonna go
+// TODO: Implement the primitives...
 
