@@ -63,46 +63,31 @@ impl WorkingFuncGraph {
     }
 }
 
+fn get_module_fn_index(name: &str, module: &uiua::Module, uasm: &uiua::Assembly) -> Option<usize> {
+    module
+        .names
+        .get_only(name, uiua::LookupPreference::Function, uasm)
+        .map(|li| li.index)
+}
+
 fn collect_structs(uasm: &uiua::Assembly, hir: &mut Hir) -> HashSet<usize> {
     // Bindings are indexed with usize
     let mut ignored_bindings: HashSet<usize> = HashSet::new();
 
-    use uiua::{BindingKind as Bk, LocalIndex};
+    use uiua::BindingKind as Bk;
     for (exp_name, exp_index) in &*uasm.exports {
         if let Bk::Module(module) = &uasm.bindings[*exp_index].kind
-            && let Some(LocalIndex {
-                index: type_const_index,
-                ..
-            }) = module
-                .names
-                .get_only("t", uiua::LookupPreference::Function, uasm)
-            && let Some(LocalIndex {
-                index: fields_const_index,
-                ..
-            }) = module
-                .names
-                .get_only("Fields", uiua::LookupPreference::Function, uasm)
+            && let Some(type_const_index) = get_module_fn_index("t", module, uasm)
+            && let Some(fields_const_index) = get_module_fn_index("Fields", module, uasm)
             && let Bk::Const(Some(uiua::Value::Box(type_array))) =
                 &uasm.bindings[type_const_index].kind
             && let Bk::Const(Some(uiua::Value::Box(fields_array))) =
                 &uasm.bindings[fields_const_index].kind
         {
-            if let Some(LocalIndex {
-                index: new_fn_index,
-                ..
-            }) = module
-                .names
-                .get_only("New", uiua::LookupPreference::Function, uasm)
-            {
+            if let Some(new_fn_index) = get_module_fn_index("New", module, uasm) {
                 ignored_bindings.insert(new_fn_index);
             }
-            if let Some(LocalIndex {
-                index: noinit_fn_index,
-                ..
-            }) = module
-                .names
-                .get_only("NoInit", uiua::LookupPreference::Function, uasm)
-            {
+            if let Some(noinit_fn_index) = get_module_fn_index("NoInit", module, uasm) {
                 ignored_bindings.insert(noinit_fn_index);
             }
             let mut struct_def = Struct {
@@ -112,14 +97,7 @@ fn collect_structs(uasm: &uiua::Assembly, hir: &mut Hir) -> HashSet<usize> {
             for (elem_name, elem_type) in fields_array.data().iter().zip(type_array.data()) {
                 if let uiua::Value::Char(name_arr) = elem_name.as_ref() {
                     let name_str: String = name_arr.elements().collect();
-                    if let Some(LocalIndex {
-                        index: field_fn_index,
-                        ..
-                    }) = module.names.get_only(
-                        name_str.as_str(),
-                        uiua::LookupPreference::Function,
-                        uasm,
-                    ) {
+                    if let Some(field_fn_index) = get_module_fn_index(&name_str, module, uasm) {
                         ignored_bindings.insert(field_fn_index);
                     }
                     struct_def
