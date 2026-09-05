@@ -45,6 +45,9 @@ pub(super) fn build_add_loop<'ctx>(
     let zero = size_type.const_int(0, false);
     let a_idx = if a_broadcast { zero } else { i };
     let b_idx = if b_broadcast { zero } else { i };
+    // Handle broadcasting, even though currently this doesn't see use.
+    // I'll test if this logic works once I write `build_add`.
+    // TODO: Test this
 
     let a_elem_ptr = unsafe {
         builder
