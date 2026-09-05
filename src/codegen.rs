@@ -11,7 +11,7 @@ use inkwell::types::{IntType, PointerType, StructType};
 use inkwell::values::{FunctionValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
 
-///
+/// Container for the various HAD types (we'll need one per array rank)
 struct HeapArrayDescriptorTypes<'ctx> {
     descriptors: HashMap<u32, StructType<'ctx>>,
 }
@@ -32,7 +32,7 @@ impl<'ctx> HeapArrayDescriptorTypes<'ctx> {
     ) -> StructType<'ctx> {
         *self.descriptors.entry(rank).or_insert_with(|| {
             let name = format!("HeapArrayDescriptor{rank}");
-            let ty = context.opaque_struct_type(&name);
+            let ty = context.opaque_struct_type(&name); // name the struct
             ty.set_body(
                 &[
                     ptr_type.into(),                   // buf
@@ -46,3 +46,105 @@ impl<'ctx> HeapArrayDescriptorTypes<'ctx> {
         })
     }
 }
+
+/// read from a HAD's dims array
+fn build_load_dim<'ctx>(
+    builder: &Builder<'ctx>,
+    size_type: IntType<'ctx>,
+    rank: u32,
+    arr_ptr: PointerValue<'ctx>,
+    i: u32,
+    label: &str,
+) -> IntValue<'ctx> {
+    let array_type = size_type.array_type(rank);
+    let zero = size_type.const_int(0, false);
+    let idx = size_type.const_int(i as u64, false);
+    // TODO: figure out how we're gonna end up doing the sizing of these types
+
+    let elem_ptr = unsafe {
+        // "GEP is very likely to segfault if indexes are used incorrectly" but i'm pretty sure this works
+        builder
+            .build_gep(
+                // get element pointer
+                array_type,
+                arr_ptr,
+                &[zero, idx],
+                &format!("{label}_gep{i}"),
+            )
+            .unwrap()
+    };
+    builder
+        .build_load(size_type, elem_ptr, &format!("{label}_val{i}"))
+        .unwrap()
+        .into_int_value()
+}
+
+/// write to a HAD's dims array
+fn build_store_dim<'ctx>(
+    builder: &Builder<'ctx>,
+    size_type: IntType<'ctx>,
+    rank: u32,
+    arr_ptr: PointerValue<'ctx>,
+    i: u32,
+    value: IntValue<'ctx>,
+    label: &str,
+) {
+    let array_type = size_type.array_type(rank);
+    let zero = size_type.const_int(0, false);
+    let idx = size_type.const_int(i as u64, false);
+    let elem_ptr = unsafe {
+        // "GEP is very likely to segfault if indexes are used incorrectly" but i'm pretty sure this works
+        builder
+            .build_gep(
+                array_type,
+                arr_ptr,
+                &[zero, idx],
+                &format!("{label}_gep{i}"),
+            )
+            .unwrap()
+    };
+    builder.build_store(elem_ptr, value).unwrap();
+}
+
+/// load a HAD's buffer address
+fn build_load_buf<'ctx>(
+    builder: &Builder<'ctx>,
+    descriptor_type: StructType<'ctx>,
+    ptr_type: PointerType<'ctx>,
+    desc_ptr: PointerValue<'ctx>,
+    label: &str,
+) -> PointerValue<'ctx> {
+    let field = builder
+        .build_struct_gep(descriptor_type, desc_ptr, 0, &format!("{label}_buf_field"))
+        .unwrap();
+    builder
+        .build_load(ptr_type, field, &format!("{label}_buf"))
+        .unwrap()
+        .into_pointer_value()
+}
+
+/// compute array length = product of dims
+fn build_element_count<'ctx>(
+    builder: &Builder<'ctx>,
+    size_type: IntType<'ctx>,
+    rank: u32,
+    dims_ptr: PointerValue<'ctx>,
+    label: &str,
+) -> IntValue<'ctx> {
+    let mut accumulator = size_type.const_int(1, false);
+    for i in 0..rank {
+        accumulator = builder
+            .build_int_mul(
+                accumulator,
+                build_load_dim(builder, size_type, rank, dims_ptr, i, label),
+                &format!("{label}_acc{i}"),
+            )
+            .unwrap();
+    }
+    accumulator
+}
+
+// TODO: make an allocator for new HADs
+// TODO: find out where the actual primitive implementations are gonna go
+// TODO: implement the primitives...
+
