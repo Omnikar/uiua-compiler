@@ -2,7 +2,7 @@ use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 
 use crate::generic_ir::{Graph, NodeIndex};
-use crate::hir::{Binding, Function, Hir, Node, Struct};
+use crate::hir::{Binding, Enum, Function, Hir, Node, Struct};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -110,17 +110,58 @@ fn struct_from_module(
         None
     }
 }
-fn collect_structs(uasm: &uiua::Assembly, hir: &mut Hir) -> HashSet<usize> {
+
+fn enum_from_module(
+    name: &str,
+    module: &uiua::Module,
+    uasm: &uiua::Assembly,
+) -> Option<(HashSet<usize>, Enum)> {
+    let mut ignored_bindings: HashSet<usize> = HashSet::new();
+    use uiua::BindingKind as Bk;
+    use uiua::LookupPreference::Function as FnLookup;
+    use uiua::LookupPreference::Module as ModLookup;
+    if let Some(variants_const_index) = get_module_item_index("Variants", module, FnLookup, uasm)
+        && let Bk::Const(Some(uiua::Value::Box(variants_array))) =
+            &uasm.bindings[variants_const_index].kind
+    {
+        let mut enum_def = Enum {
+            name: name.into(),
+            variants: Vec::new(),
+        };
+        for variant_name in variants_array.data() {
+            if let uiua::Value::Char(name_arr) = variant_name.as_ref() {
+                let name_str: String = name_arr.elements().collect();
+                if let Some(variant_mod_index) =
+                    get_module_item_index(&name_str, module, ModLookup, uasm)
+                    && let Bk::Module(variant_module) = &uasm.bindings[variant_mod_index].kind
+                    && let Some((ignored, struct_def)) =
+                        struct_from_module(&name_str, variant_module, uasm)
+                {
+                    ignored_bindings.extend(ignored);
+                    enum_def.variants.push(struct_def);
+                }
+            }
+        }
+        Some((ignored_bindings, enum_def))
+    } else {
+        None
+    }
+}
+
+fn collect_structs_and_enums(uasm: &uiua::Assembly, hir: &mut Hir) -> HashSet<usize> {
     // Bindings are indexed with usize
     let mut ignored_bindings: HashSet<usize> = HashSet::new();
 
     use uiua::BindingKind as Bk;
     for (exp_name, exp_index) in &*uasm.exports {
-        if let Bk::Module(module) = &uasm.bindings[*exp_index].kind
-            && let Some((ignored, struct_def)) = struct_from_module(exp_name, module, uasm)
-        {
-            hir.structs.push(struct_def);
-            ignored_bindings.extend(&ignored);
+        if let Bk::Module(module) = &uasm.bindings[*exp_index].kind {
+            if let Some((ignored, struct_def)) = struct_from_module(exp_name, module, uasm) {
+                hir.structs.push(struct_def);
+                ignored_bindings.extend(&ignored);
+            } else if let Some((ignored, enum_def)) = enum_from_module(exp_name, module, uasm) {
+                hir.enums.push(enum_def);
+                ignored_bindings.extend(&ignored);
+            }
         }
     }
     ignored_bindings
@@ -141,7 +182,7 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
             .collect(),
     };
 
-    let ignored_bindings = collect_structs(uasm, &mut hir);
+    let ignored_bindings = collect_structs_and_enums(uasm, &mut hir);
 
     for (binding_idx, binding_info) in uasm.bindings.iter().enumerate() {
         use uiua::BindingKind as Bk;
