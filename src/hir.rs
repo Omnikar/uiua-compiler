@@ -48,7 +48,6 @@ pub struct Enum {
 pub enum Node {
     Input,
     Output,
-    // Should this store a custom type instead?
     Constant(uiua::Value),
     FuncPrim(uiua::Primitive),
     FuncImplPrim(uiua::ImplPrimitive),
