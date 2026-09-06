@@ -75,14 +75,55 @@ pub enum ValueInfo {
     // TODO: File handles, etc?
 }
 
+impl ValueInfo {
+    pub fn supertype(&self, rhs: &Self) -> Option<Self> {
+        macro_rules! scalar_supertype_ident {
+            ($lhs:expr, $rhs:expr; $($variant:path),+) => {
+                match ($lhs, $rhs) {
+                    $(
+                        ($variant(l), $variant(r)) => {
+                            return if l == r {
+                                Some($variant(*l))
+                            } else {
+                                Some($variant(None))
+                            };
+                        }
+                    )+
+                    _ => {}
+                }
+            };
+        }
+        scalar_supertype_ident!(self, rhs; Self::Bool, Self::Int, Self::Float, Self::Char);
+        match (self, rhs) {
+            (Self::Bool(b), Self::Int(i)) | (Self::Int(i), Self::Bool(b)) => Some(Self::Int(
+                b.map(i64::from).and_then(|b| i.filter(|i| b == *i)),
+            )),
+            (Self::Bool(b), other) | (other, Self::Bool(b)) => {
+                Self::Int(b.map(i64::from)).supertype(other)
+            }
+            #[allow(clippy::cast_precision_loss, clippy::float_cmp)]
+            (Self::Int(i), Self::Float(f)) | (Self::Float(f), Self::Int(i)) => Some(Self::Float(
+                i.map(|i| i as f64).and_then(|i| f.filter(|f| i == *f)),
+            )),
+            (Self::Array(lhs), Self::Array(rhs)) => {
+                lhs.supertype(rhs).map(Box::new).map(Self::Array)
+            }
+            _ => todo!(),
+        }
+    }
+}
+
 pub mod types {
     use super::{SymShape, ValueInfo};
+    use crate::mir::polynomial::Expr;
+
+    use itertools::Itertools;
     use std::rc::Rc;
 
     #[derive(Debug, Clone)]
     pub struct ArrayValue {
-        shape: Vec<usize>,
-        data: Vec<ValueInfo>,
+        pub shape: Vec<usize>,
+        pub data: Vec<ValueInfo>,
     }
 
     #[derive(Debug, Clone)]
@@ -104,6 +145,122 @@ pub mod types {
             shape_prefix: SymShape,
             shape_suffix: SymShape,
         },
+    }
+
+    impl ArrayInfo {
+        #[allow(
+            clippy::too_many_lines,
+            reason = "This function is one big `match` expression that it doesn't seem can be split up very ergonomically."
+        )]
+        pub fn supertype(&self, rhs: &Self) -> Option<Self> {
+            match (self, rhs) {
+                (
+                    Self::Known {
+                        scalar_type: lhs_scalar_type,
+                        value: lhs_value,
+                    },
+                    Self::Known {
+                        scalar_type: rhs_scalar_type,
+                        value: rhs_value,
+                    },
+                ) => {
+                    let scalar_type = lhs_scalar_type.supertype(rhs_scalar_type)?;
+                    if lhs_value.shape.len() == rhs_value.shape.len() {
+                        let shape = lhs_value
+                            .shape
+                            .iter()
+                            .zip(&rhs_value.shape)
+                            .map(|(a, b)| {
+                                if a == b {
+                                    Expr::from(*a)
+                                } else {
+                                    Expr::new_var()
+                                }
+                            })
+                            .collect_vec();
+                        if let Some(fixed_shape) = shape
+                            .iter()
+                            .map(|ax| ax.as_const().and_then(|ax| usize::try_from(ax).ok()))
+                            .collect::<Option<Vec<_>>>()
+                            && let Some(data) = lhs_value
+                                .data
+                                .iter()
+                                .zip(&rhs_value.data)
+                                .map(|(a, b)| a.supertype(b))
+                                .collect::<Option<Vec<_>>>()
+                        {
+                            Some(Self::Known {
+                                scalar_type,
+                                value: ArrayValue {
+                                    shape: fixed_shape,
+                                    data,
+                                },
+                            })
+                        } else {
+                            Some(Self::Ranked { scalar_type, shape })
+                        }
+                    } else {
+                        todo!("Unranked supertypes are not yet implemented")
+                    }
+                }
+                (
+                    Self::Ranked {
+                        scalar_type: lhs_scalar_type,
+                        shape: lhs_shape,
+                    },
+                    Self::Ranked {
+                        scalar_type: rhs_scalar_type,
+                        shape: rhs_shape,
+                    },
+                ) => {
+                    let scalar_type = lhs_scalar_type.supertype(rhs_scalar_type)?;
+                    if lhs_shape.len() == rhs_shape.len() {
+                        let shape = lhs_shape
+                            .iter()
+                            .zip(rhs_shape)
+                            .map(|(a, b)| if a == b { a.clone() } else { Expr::new_var() })
+                            .collect_vec();
+                        Some(Self::Ranked { scalar_type, shape })
+                    } else {
+                        todo!("Unranked supertypes are not yet implemented")
+                    }
+                }
+                (
+                    Self::Unranked {
+                        scalar_type: lhs_scalar_type,
+                        shape_prefix: _lhs_shape_prefix,
+                        shape_suffix: _lhs_shape_suffix,
+                    },
+                    Self::Unranked {
+                        scalar_type: rhs_scalar_type,
+                        shape_prefix: _rhs_shape_prefix,
+                        shape_suffix: _rhs_shape_suffix,
+                    },
+                ) => {
+                    let _scalar_type = lhs_scalar_type.supertype(rhs_scalar_type)?;
+                    todo!("Unranked supertypes are not yet implemented")
+                }
+                (
+                    Self::Known {
+                        scalar_type: known_scalar_type,
+                        value,
+                    },
+                    other,
+                )
+                | (
+                    other,
+                    Self::Known {
+                        scalar_type: known_scalar_type,
+                        value,
+                    },
+                ) => Self::Ranked {
+                    scalar_type: known_scalar_type.clone(),
+                    shape: value.shape.iter().copied().map(From::from).collect(),
+                }
+                .supertype(other),
+                _ => todo!(),
+            }
+        }
     }
 
     #[derive(Debug, Clone)]

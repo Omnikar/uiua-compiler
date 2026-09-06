@@ -37,6 +37,7 @@ enum EmitFormat {
     Uasm,
     Dot,
     Hir,
+    Mir,
     LlvmIr,
     Executable,
 }
@@ -70,6 +71,9 @@ enum ProgramError {
     DataFlowError(#[from] data_flow::Error),
 
     #[error("{0}")]
+    AnalysisError(#[from] analysis::Error),
+
+    #[error("{0}")]
     DeserializeError(#[from] ron::error::SpannedError),
 
     #[error("{0}")]
@@ -89,6 +93,7 @@ enum LoweringState {
     UaStr(String),
     Uasm(Box<uiua::Assembly>),
     Hir(Box<hir::Hir>),
+    Mir(Box<mir::Mir>),
     Dot(String),
 }
 impl LoweringState {
@@ -97,6 +102,7 @@ impl LoweringState {
             Self::Ua(_) | Self::UaStr(_) => EmitFormat::Ua,
             Self::Uasm(_) => EmitFormat::Uasm,
             Self::Hir(_) => EmitFormat::Hir,
+            Self::Mir(_) => EmitFormat::Mir,
             Self::Dot(_) => EmitFormat::Dot,
         }
     }
@@ -141,8 +147,10 @@ impl LoweringState {
                 }
                 Self::Dot(result)
             }
+            (Ls::Hir(hir), Ef::Mir) => Ls::Mir(Box::new(analysis::construct_mir(hir)?)),
             (Ls::Ua(_), ef) => self.convert_to(Ef::Uasm)?.convert_to(ef)?,
-            (Ls::Uasm(_), Ef::Dot) => self.convert_to(Ef::Hir)?.convert_to(Ef::Dot)?,
+            (Ls::Uasm(_), ef) => self.convert_to(Ef::Hir)?.convert_to(ef)?,
+            (Ls::Hir(_), ef) => self.convert_to(Ef::Mir)?.convert_to(ef)?,
             _ => return Err(ProgramError::InvalidConversion(self.cur_format(), format)),
         })
     }
@@ -156,6 +164,10 @@ impl LoweringState {
             }
             Ls::Hir(hir) => {
                 writeln!(output, "{hir}")?;
+            }
+            Ls::Mir(mir) => {
+                // writeln!(output, "{mir}")?;
+                writeln!(output, "Haven't done this yet")?;
             }
             Ls::Dot(s) => {
                 writeln!(output, "{s}")?;

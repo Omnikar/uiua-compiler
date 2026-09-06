@@ -71,6 +71,9 @@ impl crate::generic_ir::FunctionNode for Node {
     }
 }
 
+/// A Uiua function represented in HIR
+///
+/// Graph nodes are expected to be added in program order.
 pub type Function = crate::generic_ir::Function<(), Node, ()>;
 
 #[cfg(test)]

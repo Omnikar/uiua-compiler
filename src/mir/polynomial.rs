@@ -1,24 +1,30 @@
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::ops::{Add, Mul, Sub};
+use std::rc::Rc;
+
+thread_local! {
+    static NVARS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 /// A multivariate polynomial of arbitrarily many variables, used to track relations between array axes of unknown length
 ///
 /// The polynomial is represented as a hashmap from exponent values to coefficients. For example, an entry of `[1, 2] -> 3` represents the term `3x₀x₁²` in the polynomial.
 /// No stored coefficients should be zero, and no exponent lists should have trailing zeros.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Expr {
-    terms: HashMap<Vec<u32>, isize>,
+    terms: HashMap<Rc<[u32]>, isize>,
 }
 
 impl Expr {
-    /// Given a variable counter, make a new variable with the next unoccupied index and increment the counter
-    pub fn new_var(nvars: &mut usize) -> Self {
-        let mut exponents = vec![0; *nvars];
+    /// Create a new variable that has never been created before
+    pub fn new_var() -> Self {
+        let nvars = NVARS.get();
+        let mut exponents = vec![0; nvars];
         exponents.push(1);
-        *nvars += 1;
+        NVARS.set(nvars + 1);
         Self {
-            terms: [(exponents, 1)].into(),
+            terms: [(exponents.into(), 1)].into(),
         }
     }
 
@@ -37,6 +43,13 @@ impl From<isize> for Expr {
     fn from(value: isize) -> Self {
         Self {
             terms: [([].into(), value)].into(),
+        }
+    }
+}
+impl From<usize> for Expr {
+    fn from(value: usize) -> Self {
+        Self {
+            terms: [([].into(), value.try_into().unwrap())].into(),
         }
     }
 }
@@ -74,11 +87,12 @@ impl Mul for Expr {
                 .map(|((lexps, lcoef), (rexps, rcoef))| {
                     (
                         lexps
-                            .into_iter()
+                            .iter()
+                            .copied()
                             .zip_longest(rexps.iter().copied())
                             .map(itertools::EitherOrBoth::or_default)
                             .map(|(l, r)| l + r)
-                            .collect::<Vec<_>>(),
+                            .collect::<Rc<[_]>>(),
                         lcoef * *rcoef,
                     )
                 })
@@ -104,7 +118,7 @@ impl Mul<Expr> for isize {
 }
 impl std::iter::Product for Expr {
     fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(1.into(), |x, y| x * y)
+        iter.fold(1isize.into(), |x, y| x * y)
     }
 }
 impl Expr {

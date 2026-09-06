@@ -17,7 +17,6 @@ type Stack = Vec<(NodeIndex, usize)>;
 struct WorkingFuncGraph {
     graph: Graph<Node>,
     input_idx: NodeIndex,
-    output_idx: NodeIndex,
     stack: Stack,
     under_stack: Stack,
     arg_count: usize,
@@ -28,11 +27,9 @@ impl WorkingFuncGraph {
     fn empty() -> Self {
         let mut graph = Graph::new();
         let input_idx = graph.add_node(Node::Input);
-        let output_idx = graph.add_node(Node::Output);
         Self {
             graph,
             input_idx,
-            output_idx,
             stack: Stack::new(),
             under_stack: Stack::new(),
             arg_count: 0,
@@ -112,17 +109,18 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
 fn simulate_data_flow(uiua_node: &uiua::Node) -> Result<Function, Error> {
     let mut func_graph = WorkingFuncGraph::empty();
     process_node(uiua_node, &mut func_graph)?;
+    let output_idx = func_graph.graph.add_node(Node::Output);
     for (in_i, (node_idx, out_i)) in func_graph.stack.into_iter().rev().enumerate() {
         func_graph
             .graph
-            .add_edge(func_graph.output_idx, node_idx, (out_i, in_i));
+            .add_edge(output_idx, node_idx, (out_i, in_i));
     }
     let node_metas = func_graph.graph.node_indices().map(|k| (k, ())).collect();
     Ok(Function {
         meta: (),
         graph: func_graph.graph,
         input_idx: func_graph.input_idx,
-        output_idx: func_graph.output_idx,
+        output_idx,
         node_metas,
         spans: func_graph.spans,
     })
@@ -136,6 +134,7 @@ fn process_node(uiua_node: &uiua::Node, func_graph: &mut WorkingFuncGraph) -> Re
     let sig = uiua_node.sig().map_err(|e| Error::Other(e.to_string()))?;
     func_graph.extend_args(sig.args());
 
+    // NOTE: Nodes must be added in an order corresponding to the order in which they would execute
     use uiua::ImplPrimitive as Ip;
     use uiua::Node as UNode;
     use uiua::Primitive as Pr;
