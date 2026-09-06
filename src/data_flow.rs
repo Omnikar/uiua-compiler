@@ -77,12 +77,12 @@ fn get_strings_by_name(
     module: &uiua::Module,
     uasm: &uiua::Assembly,
 ) -> Option<impl Iterator<Item = String>> {
-    use uiua::BindingKind as Bk;
     if let Some(const_index) =
         get_module_item_index(name, module, uiua::LookupPreference::Function, uasm)
-        && let Bk::Const(Some(uiua::Value::Box(str_array))) = &uasm.bindings[const_index].kind
+        && let uiua::BindingKind::Const(Some(uiua::Value::Box(char_arrays))) =
+            &uasm.bindings[const_index].kind
     {
-        Some(str_array.elements().filter_map(|v| {
+        Some(char_arrays.elements().filter_map(|v| {
             if let uiua::Value::Char(string_arr) = v.as_ref() {
                 Some(string_arr.elements().collect())
             } else {
@@ -102,11 +102,12 @@ fn struct_from_module(
 ) -> Option<(HashSet<usize>, Struct)> {
     let mut ignored_bindings: HashSet<usize> = HashSet::new();
 
-    use uiua::BindingKind as Bk;
     use uiua::LookupPreference::Function as FnLookup;
     if let Some(fields) = get_strings_by_name("Fields", module, uasm)
         && let Some(type_const_index) = get_module_item_index("t", module, FnLookup, uasm)
-        && let Bk::Const(Some(uiua::Value::Box(type_array))) = &uasm.bindings[type_const_index].kind
+        // Extract box array from binding
+        && let uiua::BindingKind::Const(Some(uiua::Value::Box(type_array))) =
+            &uasm.bindings[type_const_index].kind
     {
         ignored_bindings.extend(
             ["New", "NoInit"]
@@ -136,8 +137,6 @@ fn enum_from_module(
 ) -> Option<(HashSet<usize>, Enum)> {
     let mut ignored_bindings: HashSet<usize> = HashSet::new();
 
-    use uiua::BindingKind as Bk;
-    use uiua::LookupPreference::Module as ModLookup;
     if let Some(variants) = get_strings_by_name("Variants", module, uasm) {
         let mut enum_def = Enum {
             name: name.into(),
@@ -145,8 +144,9 @@ fn enum_from_module(
         };
         for variant in variants {
             if let Some(variant_mod_index) =
-                get_module_item_index(&variant, module, ModLookup, uasm)
-                && let Bk::Module(variant_module) = &uasm.bindings[variant_mod_index].kind
+                get_module_item_index(&variant, module, uiua::LookupPreference::Module, uasm)
+                && let uiua::BindingKind::Module(variant_module) =
+                    &uasm.bindings[variant_mod_index].kind
                 && let Some((ignored, struct_def)) =
                     struct_from_module(&variant, variant_module, uasm)
             {
@@ -160,13 +160,14 @@ fn enum_from_module(
     }
 }
 
+// Find modules meeting the conditions to be a data def or variant,
+// generate the appropriate struct and enum definitions, and place them in the IR
 fn collect_structs_and_enums(uasm: &uiua::Assembly, hir: &mut Hir) -> HashSet<usize> {
     // Bindings are indexed with usize
     let mut ignored_bindings: HashSet<usize> = HashSet::new();
 
-    use uiua::BindingKind as Bk;
     for (exp_name, exp_index) in &*uasm.exports {
-        if let Bk::Module(module) = &uasm.bindings[*exp_index].kind {
+        if let uiua::BindingKind::Module(module) = &uasm.bindings[*exp_index].kind {
             if let Some((ignored, struct_def)) = struct_from_module(exp_name, module, uasm) {
                 hir.structs.push(struct_def);
                 ignored_bindings.extend(&ignored);
