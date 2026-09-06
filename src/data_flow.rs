@@ -60,6 +60,7 @@ impl WorkingFuncGraph {
     }
 }
 
+// Get the global binding index of a named module member
 fn get_module_item_index(
     name: &str,
     module: &uiua::Module,
@@ -69,7 +70,8 @@ fn get_module_item_index(
     module.names.get_only(name, pref, uasm).map(|li| li.index)
 }
 
-// Lookup and process a string list by it's name within a module
+// Lookup and process a box array of char arrays as strings
+// The array is looked up within a given module by name
 fn get_strings_by_name(
     name: &str,
     module: &uiua::Module,
@@ -199,6 +201,7 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
     for (binding_idx, binding_info) in uasm.bindings.iter().enumerate() {
         use uiua::BindingKind as Bk;
         match &binding_info.kind {
+            // Skip bindings that are known to refer to generated constructors and accessors for data defs
             Bk::Func(function) if !ignored_bindings.contains(&binding_idx) => {
                 let uiua_node = &uasm[function];
                 let binding = Binding {
