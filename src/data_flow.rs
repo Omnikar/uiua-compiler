@@ -60,7 +60,7 @@ impl WorkingFuncGraph {
     }
 }
 
-// Get the global binding index of a named module member
+/// Get the global binding index of a named module member
 fn get_module_item_index(
     name: &str,
     module: &uiua::Module,
@@ -70,8 +70,8 @@ fn get_module_item_index(
     module.names.get_only(name, pref, uasm).map(|li| li.index)
 }
 
-// Lookup and process a box array of char arrays as strings
-// The array is looked up within a given module by name
+/// Look up and process a box array of char arrays as strings
+/// The array is looked up within a given module by name
 fn iter_string_array_member(
     name: &str,
     module: &uiua::Module,
@@ -94,12 +94,12 @@ fn iter_string_array_member(
     }
 }
 
-// Returns a list of indices of ignored bindings (i.e. `New`, `NoInit`) alongside the struct
+/// Returns a list of indices of ignored bindings (i.e. `New`, `NoInit`) alongside the struct
 fn struct_from_module(
     name: &str,
     module: &uiua::Module,
     uasm: &uiua::Assembly,
-) -> Option<(HashSet<usize>, Struct)> {
+) -> Option<(Struct, HashSet<usize>)> {
     let mut ignored_bindings: HashSet<usize> = HashSet::new();
 
     use uiua::LookupPreference::Function as FnLookup;
@@ -124,7 +124,7 @@ fn struct_from_module(
             }
             struct_def.fields.push((field, elem_type.as_ref().clone()));
         }
-        Some((ignored_bindings, struct_def))
+        Some((struct_def, ignored_bindings))
     } else {
         None
     }
@@ -134,7 +134,7 @@ fn enum_from_module(
     name: &str,
     module: &uiua::Module,
     uasm: &uiua::Assembly,
-) -> Option<(HashSet<usize>, Enum)> {
+) -> Option<(Enum, HashSet<usize>)> {
     let mut ignored_bindings: HashSet<usize> = HashSet::new();
 
     if let Some(variants) = iter_string_array_member("Variants", module, uasm) {
@@ -147,14 +147,14 @@ fn enum_from_module(
                 get_module_item_index(&variant, module, uiua::LookupPreference::Module, uasm)
                 && let uiua::BindingKind::Module(variant_module) =
                     &uasm.bindings[variant_mod_index].kind
-                && let Some((ignored, struct_def)) =
+                && let Some((struct_def, ignored)) =
                     struct_from_module(&variant, variant_module, uasm)
             {
                 ignored_bindings.extend(ignored);
                 enum_def.variants.push(struct_def);
             }
         }
-        Some((ignored_bindings, enum_def))
+        Some((enum_def, ignored_bindings))
     } else {
         None
     }
@@ -168,10 +168,10 @@ fn collect_structs_and_enums(uasm: &uiua::Assembly, hir: &mut Hir) -> HashSet<us
 
     for (exp_name, exp_index) in &*uasm.exports {
         if let uiua::BindingKind::Module(module) = &uasm.bindings[*exp_index].kind {
-            if let Some((ignored, struct_def)) = struct_from_module(exp_name, module, uasm) {
+            if let Some((struct_def, ignored)) = struct_from_module(exp_name, module, uasm) {
                 hir.structs.push(struct_def);
                 ignored_bindings.extend(&ignored);
-            } else if let Some((ignored, enum_def)) = enum_from_module(exp_name, module, uasm) {
+            } else if let Some((enum_def, ignored)) = enum_from_module(exp_name, module, uasm) {
                 hir.enums.push(enum_def);
                 ignored_bindings.extend(&ignored);
             }
