@@ -54,9 +54,18 @@ fn monomorphize_and_analyze(
             mir,
         )?;
     }
+    for edge_idx in hir_func.graph.edge_indices() {
+        let (source, target) = hir_func.graph.edge_endpoints(edge_idx).unwrap();
+        let weight = hir_func.graph[edge_idx];
+        graph.add_edge(graph_map[&source], graph_map[&target], weight);
+    }
     let input_idx = graph_map[&hir_func.input_idx];
     let output_idx = graph_map[&hir_func.output_idx];
-    let outputs = info_map[&output_idx].clone();
+    let outputs = graph
+        .edges(output_idx)
+        .sorted_by_key(|e| e.weight().1)
+        .map(|e| info_map[&graph_map[&e.target()]][e.weight().0].clone())
+        .collect_vec();
     Ok(mir::Function {
         meta: mir::FunctionMeta {
             inputs: inputs.to_owned(),
@@ -97,7 +106,6 @@ fn analyze_node(
         hir::Node::Output => {
             let node_idx = mir_graph.add_node(mir::Node::Output);
             graph_map.insert(hir_node_idx, node_idx);
-            info_map.insert(node_idx, input_infos.into_iter().cloned().collect());
         }
         hir::Node::Constant(value) => {
             let value_info = mir::ValueInfo::try_from(value)?;
