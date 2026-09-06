@@ -72,7 +72,7 @@ fn get_module_item_index(
 
 // Lookup and process a box array of char arrays as strings
 // The array is looked up within a given module by name
-fn get_strings_by_name(
+fn iter_string_array_member(
     name: &str,
     module: &uiua::Module,
     uasm: &uiua::Assembly,
@@ -103,7 +103,7 @@ fn struct_from_module(
     let mut ignored_bindings: HashSet<usize> = HashSet::new();
 
     use uiua::LookupPreference::Function as FnLookup;
-    if let Some(fields) = get_strings_by_name("Fields", module, uasm)
+    if let Some(fields) = iter_string_array_member("Fields", module, uasm)
         && let Some(type_const_index) = get_module_item_index("t", module, FnLookup, uasm)
         // Extract box array from binding
         && let uiua::BindingKind::Const(Some(uiua::Value::Box(type_array))) =
@@ -137,7 +137,7 @@ fn enum_from_module(
 ) -> Option<(HashSet<usize>, Enum)> {
     let mut ignored_bindings: HashSet<usize> = HashSet::new();
 
-    if let Some(variants) = get_strings_by_name("Variants", module, uasm) {
+    if let Some(variants) = iter_string_array_member("Variants", module, uasm) {
         let mut enum_def = Enum {
             name: name.into(),
             variants: Vec::new(),
