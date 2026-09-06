@@ -1,16 +1,17 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 // TODO: Name this
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hir {
     pub structs: Vec<Struct>,
     pub enums: Vec<Enum>,
     pub bindings: Vec<Binding>,
     pub main: Option<(Function, usize)>,
     pub spans: Vec<uiua::Span>,
-    pub files: HashMap<PathBuf, String>,
+    pub files: Rc<HashMap<PathBuf, String>>,
 }
 
 impl std::fmt::Display for Hir {
@@ -21,7 +22,7 @@ impl std::fmt::Display for Hir {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Binding {
     pub span: uiua::CodeSpan,
     pub func_id: uiua::FunctionId,
@@ -29,7 +30,7 @@ pub struct Binding {
     pub func: Function,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Struct {
     pub name: String,
 
@@ -38,7 +39,7 @@ pub struct Struct {
     pub fields: Vec<(String, uiua::Value)>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Enum {
     pub name: String,
     pub variants: Vec<Struct>,

@@ -67,12 +67,13 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
         bindings: Vec::new(),
         main: None,
         spans: uasm.spans.iter().cloned().collect(),
-        files: uasm
-            .inputs
-            .files
-            .iter()
-            .map(|entry| (entry.key().clone(), entry.value().to_string()))
-            .collect(),
+        files: std::rc::Rc::new(
+            uasm.inputs
+                .files
+                .iter()
+                .map(|entry| (entry.key().clone(), entry.value().to_string()))
+                .collect(),
+        ),
     };
 
     let ignored_bindings = collect_structs_and_enums(uasm, &mut hir);
@@ -287,9 +288,10 @@ fn process_node(uiua_node: &uiua::Node, func_graph: &mut WorkingFuncGraph) -> Re
                 process_node(sub_node, func_graph)?;
             }
         }
-        UNode::Push(value) => {
+        UNode::Push(value, span) => {
             let new_node_idx = func_graph.graph.add_node(Node::Constant(value.clone()));
             func_graph.stack.push((new_node_idx, 0));
+            func_graph.spans.insert(new_node_idx, *span);
         }
         // --- Unimplemented fillers ---
         UNode::TrackCaller(sig_node) => {

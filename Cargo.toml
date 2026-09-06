@@ -8,17 +8,21 @@ name = "uiuac"
 path = "src/main.rs"
 
 [dependencies]
+# CLI
+ariadne = "0.6.0"
 clap = { version = "4", features = ["derive"] }
 thiserror = "2"
 
+# Algorithms
 bidimap = "0.7.0"
 itertools = "0.15.0"
+petgraph = "0.8.3"
 
+# Serialization
 regex = "1"
 ron = "0.12.2"
 serde = "1"
 
+# Compilation
 inkwell = { version = "0.10.0", features = ["llvm22-1"] }
-petgraph = "0.8.3"
-
 uiua = { git = "https://github.com/Omnikar/uiua", branch = "ron-compatible" }

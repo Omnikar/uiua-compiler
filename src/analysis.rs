@@ -1,6 +1,8 @@
 use itertools::Itertools;
 use petgraph::visit::EdgeRef;
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::rc::Rc;
 
 use crate::generic_ir::{Graph, NodeIndex};
 use crate::hir::{self, Hir};
@@ -9,9 +11,99 @@ use crate::mir::{self, Mir, ValueInfo};
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("{0}")]
-    UiuaValueError(#[from] UiuaValueError),
-    #[error("{0}: Cannot take the square root of a character")]
-    SqrtChar(uiua::Span),
+    FancyError(FancyError),
+}
+
+#[derive(thiserror::Error, Debug)]
+#[error("{0}: {1}", .span, .kind)]
+pub struct FancyError {
+    files: Rc<HashMap<PathBuf, String>>,
+    span: uiua::Span,
+    input_spans: Vec<uiua::Span>,
+    kind: ErrorKind,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ErrorKind {
+    #[error("{0}")]
+    UiuaValue(UiuaValueError),
+    #[error("Cannot take the square root of a character")]
+    SqrtChar,
+}
+
+impl FancyError {
+    pub fn eprint(&self) {
+        use ariadne::{ColorGenerator, Label, Report, ReportKind, Source};
+
+        let mut colors = ColorGenerator::new();
+
+        match &self.kind {
+            ErrorKind::UiuaValue(err) => {
+                let (source_path, source, range) = span_to_ariadne(&self.span, &self.files);
+                Report::build(ReportKind::Error, (&source_path, range.clone()))
+                    .with_message(err)
+                    .with_label(
+                        Label::new((&source_path, range.clone()))
+                            .with_message(err)
+                            .with_color(colors.next()),
+                    )
+                    .finish()
+                    .eprint((&source_path, Source::from(source)))
+                    .unwrap();
+            }
+            ErrorKind::SqrtChar => {
+                let (source_path, source, range) = span_to_ariadne(&self.span, &self.files);
+                let (input_source_path, _input_source, input_range) =
+                    span_to_ariadne(&self.input_spans[0], &self.files);
+
+                Report::build(ReportKind::Error, (&source_path, range.clone()))
+                    .with_message(&self.kind)
+                    .with_label(
+                        Label::new((&source_path, range))
+                            .with_message("Square root expects numbers")
+                            .with_color(colors.next()),
+                    )
+                    .with_label(
+                        Label::new((&input_source_path, input_range))
+                            .with_message("Characters produced here")
+                            .with_color(colors.next())
+                            .with_order(-1),
+                    )
+                    .finish()
+                    .eprint((&source_path, Source::from(source)))
+                    .unwrap();
+            }
+        }
+    }
+}
+
+fn span_to_ariadne<'a>(
+    span: &'a uiua::Span,
+    files: &'a HashMap<PathBuf, String>,
+) -> (std::borrow::Cow<'a, str>, &'a str, std::ops::Range<usize>) {
+    span.code_ref()
+        .and_then(|span| code_span_to_ariadne(span, files))
+        .unwrap_or_else(|| (std::borrow::Cow::default(), "", 0..0))
+}
+
+fn code_span_to_ariadne<'a>(
+    span: &'a uiua::CodeSpan,
+    files: &'a HashMap<PathBuf, String>,
+) -> Option<(std::borrow::Cow<'a, str>, &'a str, std::ops::Range<usize>)> {
+    match &span.src {
+        uiua::InputSrc::File(path) => Some((
+            path.to_string_lossy(),
+            &*files[&**path],
+            span.start.char_pos as usize..span.end.char_pos as usize,
+        )),
+        uiua::InputSrc::Str(_) => None,
+        uiua::InputSrc::Macro(code_span) => code_span_to_ariadne(code_span, files),
+        uiua::InputSrc::Literal(string) => Some((
+            std::borrow::Cow::default(),
+            string,
+            0..string.chars().count(),
+        )),
+    }
 }
 
 pub fn construct_mir(hir: &hir::Hir) -> Result<mir::Mir, Error> {
@@ -95,13 +187,19 @@ fn analyze_node(
     mir: &mut Mir,
 ) -> Result<(), Error> {
     let hir_node = &hir_func.graph[hir_node_idx];
+    let span = &hir.spans[hir_func.spans.get(&hir_node_idx).copied().unwrap_or(0)];
 
-    let input_infos = hir_func
+    let (input_infos, input_spans): (Vec<_>, Vec<_>) = hir_func
         .graph
         .edges(hir_node_idx)
         .sorted_by_key(|e| e.weight().1)
-        .map(|e| &info_map[&graph_map[&e.target()]][e.weight().0])
-        .collect_vec();
+        .map(|e| {
+            (
+                &info_map[&graph_map[&e.target()]][e.weight().0],
+                &hir.spans[hir_func.spans.get(&e.target()).copied().unwrap_or(0)],
+            )
+        })
+        .unzip();
 
     match hir_node {
         hir::Node::Input => {}
@@ -110,7 +208,15 @@ fn analyze_node(
             graph_map.insert(hir_node_idx, node_idx);
         }
         hir::Node::Constant(value) => {
-            let value_info = mir::ValueInfo::try_from(value)?;
+            let value_info = mir::ValueInfo::try_from(value).map_err(|err| {
+                Error::FancyError(FancyError {
+                    files: hir.files.clone(),
+                    span: hir.spans[hir_func.spans.get(&hir_node_idx).copied().unwrap_or(0)]
+                        .clone(),
+                    input_spans: Vec::new(),
+                    kind: ErrorKind::UiuaValue(err),
+                })
+            })?;
             let node_idx = mir_graph.add_node(mir::Node::Constant(value_info.clone()));
             graph_map.insert(hir_node_idx, node_idx);
             info_map.insert(node_idx, [value_info].into());
@@ -122,11 +228,7 @@ fn analyze_node(
             let input_info = input_infos[0];
             info_map.insert(
                 node_idx,
-                [analyze_sqrt(
-                    input_info,
-                    &hir.spans[hir_func.spans[&hir_node_idx]],
-                )?]
-                .into(),
+                [analyze_sqrt(input_info, hir, span, &input_spans)?].into(),
             );
         }
         // hir::Node::FuncPrim(primitive) => todo!(),
@@ -140,24 +242,34 @@ fn analyze_node(
     Ok(())
 }
 
-fn analyze_sqrt(input_info: &ValueInfo, span: &uiua::Span) -> Result<ValueInfo, Error> {
+fn analyze_sqrt(
+    input_info: &ValueInfo,
+    hir: &Hir,
+    span: &uiua::Span,
+    input_spans: &[&uiua::Span],
+) -> Result<ValueInfo, Error> {
     Ok(match input_info {
         ValueInfo::Bool(_) => input_info.clone(),
         #[allow(clippy::cast_precision_loss)]
         ValueInfo::Int(i) => ValueInfo::Float(i.map(|i| (i as f64).sqrt())),
         ValueInfo::Float(f) => ValueInfo::Float(f.map(f64::sqrt)),
         ValueInfo::Char(_) => {
-            return Err(Error::SqrtChar(span.clone()));
+            return Err(Error::FancyError(FancyError {
+                files: Rc::clone(&hir.files),
+                span: span.clone(),
+                input_spans: input_spans.iter().map(|&x| x.clone()).collect(),
+                kind: ErrorKind::SqrtChar,
+            }));
         }
         ValueInfo::Array(array_info) => match &**array_info {
             mir::types::ArrayInfo::Known { scalar_type, value } => {
-                let scalar_type = analyze_sqrt(scalar_type, span)?;
+                let scalar_type = analyze_sqrt(scalar_type, hir, span, input_spans)?;
                 let value = mir::types::ArrayValue {
                     shape: value.shape.clone(),
                     data: value
                         .data
                         .iter()
-                        .map(|x| analyze_sqrt(x, span))
+                        .map(|x| analyze_sqrt(x, hir, span, input_spans))
                         .collect::<Result<Vec<_>, _>>()?,
                 };
                 ValueInfo::Array(Box::new(mir::types::ArrayInfo::Known {
@@ -166,7 +278,7 @@ fn analyze_sqrt(input_info: &ValueInfo, span: &uiua::Span) -> Result<ValueInfo, 
                 }))
             }
             mir::types::ArrayInfo::Ranked { scalar_type, shape } => {
-                let scalar_type = analyze_sqrt(scalar_type, span)?;
+                let scalar_type = analyze_sqrt(scalar_type, hir, span, input_spans)?;
                 ValueInfo::Array(Box::new(mir::types::ArrayInfo::Ranked {
                     scalar_type,
                     shape: shape.clone(),
@@ -177,7 +289,7 @@ fn analyze_sqrt(input_info: &ValueInfo, span: &uiua::Span) -> Result<ValueInfo, 
                 shape_prefix,
                 shape_suffix,
             } => {
-                let scalar_type = analyze_sqrt(scalar_type, span)?;
+                let scalar_type = analyze_sqrt(scalar_type, hir, span, input_spans)?;
                 ValueInfo::Array(Box::new(mir::types::ArrayInfo::Unranked {
                     scalar_type,
                     shape_prefix: shape_prefix.clone(),

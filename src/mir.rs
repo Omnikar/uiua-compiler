@@ -3,6 +3,7 @@ pub mod polynomial;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use polynomial::Expr;
 
@@ -13,7 +14,7 @@ pub struct Mir {
     pub bindings: Vec<Binding>,
     pub main: Option<(Function, usize)>,
     pub spans: Vec<uiua::Span>,
-    pub files: HashMap<PathBuf, String>,
+    pub files: Rc<HashMap<PathBuf, String>>,
 }
 
 impl std::fmt::Display for Mir {
@@ -117,7 +118,7 @@ impl ValueInfo {
             (Self::Array(lhs), Self::Array(rhs)) => {
                 lhs.supertype(rhs).map(Box::new).map(Self::Array)
             }
-            _ => todo!(),
+            _ => None,
         }
     }
 }
