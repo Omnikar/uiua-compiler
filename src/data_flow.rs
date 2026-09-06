@@ -92,7 +92,7 @@ fn struct_from_module(
             name: name.into(),
             fields: Vec::new(),
         };
-        for (elem_name, elem_type) in fields_array.data().iter().zip(type_array.data()) {
+        for (elem_name, elem_type) in fields_array.elements().zip(type_array.elements()) {
             if let uiua::Value::Char(name_arr) = elem_name.as_ref() {
                 let name_str: String = name_arr.elements().collect();
                 if let Some(field_fn_index) =
@@ -128,7 +128,7 @@ fn enum_from_module(
             name: name.into(),
             variants: Vec::new(),
         };
-        for variant_name in variants_array.data() {
+        for variant_name in variants_array.elements() {
             if let uiua::Value::Char(name_arr) = variant_name.as_ref() {
                 let name_str: String = name_arr.elements().collect();
                 if let Some(variant_mod_index) =
