@@ -60,11 +60,13 @@ impl WorkingFuncGraph {
     }
 }
 
-fn get_module_fn_index(name: &str, module: &uiua::Module, uasm: &uiua::Assembly) -> Option<usize> {
-    module
-        .names
-        .get_only(name, uiua::LookupPreference::Function, uasm)
-        .map(|li| li.index)
+fn get_module_item_index(
+    name: &str,
+    module: &uiua::Module,
+    pref: uiua::LookupPreference,
+    uasm: &uiua::Assembly,
+) -> Option<usize> {
+    module.names.get_only(name, pref, uasm).map(|li| li.index)
 }
 
 fn struct_from_module(
@@ -74,8 +76,9 @@ fn struct_from_module(
 ) -> Option<(HashSet<usize>, Struct)> {
     let mut ignored_bindings: HashSet<usize> = HashSet::new();
     use uiua::BindingKind as Bk;
-    if let Some(type_const_index) = get_module_fn_index("t", module, uasm)
-        && let Some(fields_const_index) = get_module_fn_index("Fields", module, uasm)
+    use uiua::LookupPreference::Function as FnLookup;
+    if let Some(type_const_index) = get_module_item_index("t", module, FnLookup, uasm)
+        && let Some(fields_const_index) = get_module_item_index("Fields", module, FnLookup, uasm)
         && let Bk::Const(Some(uiua::Value::Box(type_array))) = &uasm.bindings[type_const_index].kind
         && let Bk::Const(Some(uiua::Value::Box(fields_array))) =
             &uasm.bindings[fields_const_index].kind
@@ -83,7 +86,7 @@ fn struct_from_module(
         ignored_bindings.extend(
             ["New", "NoInit"]
                 .into_iter()
-                .filter_map(|name| get_module_fn_index(name, module, uasm)),
+                .filter_map(|name| get_module_item_index(name, module, FnLookup, uasm)),
         );
         let mut struct_def = Struct {
             name: name.into(),
@@ -92,7 +95,9 @@ fn struct_from_module(
         for (elem_name, elem_type) in fields_array.data().iter().zip(type_array.data()) {
             if let uiua::Value::Char(name_arr) = elem_name.as_ref() {
                 let name_str: String = name_arr.elements().collect();
-                if let Some(field_fn_index) = get_module_fn_index(&name_str, module, uasm) {
+                if let Some(field_fn_index) =
+                    get_module_item_index(&name_str, module, FnLookup, uasm)
+                {
                     ignored_bindings.insert(field_fn_index);
                 }
                 struct_def
