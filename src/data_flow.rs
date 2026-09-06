@@ -69,6 +69,7 @@ fn get_module_item_index(
     module.names.get_only(name, pref, uasm).map(|li| li.index)
 }
 
+// Lookup and process a string list by it's name within a module
 fn get_strings_by_name(
     name: &str,
     module: &uiua::Module,
@@ -91,6 +92,7 @@ fn get_strings_by_name(
     }
 }
 
+// Returns a list of indices of ignored bindings (i.e. `New`, `NoInit`) alongside the struct
 fn struct_from_module(
     name: &str,
     module: &uiua::Module,
@@ -192,6 +194,8 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
 
     let ignored_bindings = collect_structs_and_enums(uasm, &mut hir);
 
+    // Binding indices are based on the index at which they appear in the Uasm,
+    // so enumerating the index map is enough to get them
     for (binding_idx, binding_info) in uasm.bindings.iter().enumerate() {
         use uiua::BindingKind as Bk;
         match &binding_info.kind {
