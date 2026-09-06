@@ -21,9 +21,9 @@ pub(crate) fn codegen() {
     let elem_type = context.i32_type(); // ArrayU32 element type
     let ptr_type = context.ptr_type(AddressSpace::default());
 
-    let mut type_cache = HeapArrayDescriptorTypes::new();
+    let mut types = HeapArrayDescriptorTypes::new();
     for rank in 1..8 {
-        let descriptor_type = type_cache.get(&context, ptr_type, size_type, rank);
+        let descriptor_type = types.get(&context, ptr_type, size_type, rank);
 
         let function = build_array_add_strict(
             &context,
