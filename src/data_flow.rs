@@ -160,8 +160,8 @@ fn enum_from_module(
     }
 }
 
-// Find modules meeting the conditions to be a data def or variant,
-// generate the appropriate struct and enum definitions, and place them in the IR
+/// Find modules meeting the conditions to be a data def or variant,
+/// generate the appropriate struct and enum definitions, and place them in the IR
 fn collect_structs_and_enums(uasm: &uiua::Assembly, hir: &mut Hir) -> HashSet<usize> {
     // Bindings are indexed with usize
     let mut ignored_bindings: HashSet<usize> = HashSet::new();
