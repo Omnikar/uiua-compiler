@@ -10,6 +10,8 @@ use crate::mir::{self, Mir, ValueInfo};
 pub enum Error {
     #[error("{0}")]
     UiuaValueError(#[from] UiuaValueError),
+    #[error("{0}: Cannot take the square root of a character")]
+    SqrtChar(uiua::Span),
 }
 
 pub fn construct_mir(hir: &hir::Hir) -> Result<mir::Mir, Error> {
@@ -113,6 +115,20 @@ fn analyze_node(
             graph_map.insert(hir_node_idx, node_idx);
             info_map.insert(node_idx, [value_info].into());
         }
+        hir::Node::FuncPrim(uiua::Primitive::Sqrt) => {
+            let node_idx = mir_graph.add_node(mir::Node::FuncPrim(uiua::Primitive::Sqrt));
+            graph_map.insert(hir_node_idx, node_idx);
+
+            let input_info = input_infos[0];
+            info_map.insert(
+                node_idx,
+                [analyze_sqrt(
+                    input_info,
+                    &hir.spans[hir_func.spans[&hir_node_idx]],
+                )?]
+                .into(),
+            );
+        }
         // hir::Node::FuncPrim(primitive) => todo!(),
         // hir::Node::FuncImplPrim(impl_primitive) => todo!(),
         // hir::Node::ModPrim(primitive, functions) => todo!(),
@@ -122,6 +138,55 @@ fn analyze_node(
     }
 
     Ok(())
+}
+
+fn analyze_sqrt(input_info: &ValueInfo, span: &uiua::Span) -> Result<ValueInfo, Error> {
+    Ok(match input_info {
+        ValueInfo::Bool(_) => input_info.clone(),
+        #[allow(clippy::cast_precision_loss)]
+        ValueInfo::Int(i) => ValueInfo::Float(i.map(|i| (i as f64).sqrt())),
+        ValueInfo::Float(f) => ValueInfo::Float(f.map(f64::sqrt)),
+        ValueInfo::Char(_) => {
+            return Err(Error::SqrtChar(span.clone()));
+        }
+        ValueInfo::Array(array_info) => match &**array_info {
+            mir::types::ArrayInfo::Known { scalar_type, value } => {
+                let scalar_type = analyze_sqrt(scalar_type, span)?;
+                let value = mir::types::ArrayValue {
+                    shape: value.shape.clone(),
+                    data: value
+                        .data
+                        .iter()
+                        .map(|x| analyze_sqrt(x, span))
+                        .collect::<Result<Vec<_>, _>>()?,
+                };
+                ValueInfo::Array(Box::new(mir::types::ArrayInfo::Known {
+                    scalar_type,
+                    value,
+                }))
+            }
+            mir::types::ArrayInfo::Ranked { scalar_type, shape } => {
+                let scalar_type = analyze_sqrt(scalar_type, span)?;
+                ValueInfo::Array(Box::new(mir::types::ArrayInfo::Ranked {
+                    scalar_type,
+                    shape: shape.clone(),
+                }))
+            }
+            mir::types::ArrayInfo::Unranked {
+                scalar_type,
+                shape_prefix,
+                shape_suffix,
+            } => {
+                let scalar_type = analyze_sqrt(scalar_type, span)?;
+                ValueInfo::Array(Box::new(mir::types::ArrayInfo::Unranked {
+                    scalar_type,
+                    shape_prefix: shape_prefix.clone(),
+                    shape_suffix: shape_suffix.clone(),
+                }))
+            }
+        },
+        _ => todo!(),
+    })
 }
 
 #[derive(thiserror::Error, Debug)]
