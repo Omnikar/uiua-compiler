@@ -126,3 +126,54 @@ impl Expr {
         std::iter::repeat_n(self, n as usize).product()
     }
 }
+
+impl std::fmt::Display for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = self
+            .terms
+            .iter()
+            .map(|(exps, coef)| {
+                let vars = exps
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, &p)| {
+                        if p == 0 {
+                            None
+                        } else if p == 1 {
+                            Some(format!("x{}", encode_num(i, &SUBSCRIPT_CHARS)))
+                        } else {
+                            Some(format!(
+                                "x{}{}",
+                                encode_num(i, &SUBSCRIPT_CHARS),
+                                encode_num(p as usize, &SUPERSCRIPT_CHARS)
+                            ))
+                        }
+                    })
+                    .join("");
+                if *coef > 1 {
+                    format!("{coef}{vars}")
+                } else {
+                    vars
+                }
+            })
+            .join(" + ");
+        write!(f, "{s}")
+    }
+}
+impl serde::Serialize for Expr {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&format!("{self}"))
+    }
+}
+
+const SUBSCRIPT_CHARS: [char; 10] = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
+const SUPERSCRIPT_CHARS: [char; 10] = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'];
+fn encode_num(num: usize, chars: &[char; 10]) -> String {
+    num.to_string()
+        .chars()
+        .map(|c| chars[c.to_digit(10).unwrap() as usize])
+        .collect()
+}

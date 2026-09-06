@@ -166,8 +166,7 @@ impl LoweringState {
                 writeln!(output, "{hir}")?;
             }
             Ls::Mir(mir) => {
-                // writeln!(output, "{mir}")?;
-                writeln!(output, "Haven't done this yet")?;
+                writeln!(output, "{mir}")?;
             }
             Ls::Dot(s) => {
                 writeln!(output, "{s}")?;

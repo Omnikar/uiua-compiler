@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use polynomial::Expr;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Mir {
     pub structs: Vec<Struct>,
     pub enums: Vec<Enum>,
@@ -16,7 +16,15 @@ pub struct Mir {
     pub files: HashMap<PathBuf, String>,
 }
 
-#[derive(Debug, Clone)]
+impl std::fmt::Display for Mir {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ron = ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::new()).unwrap();
+        let ron = crate::generic_ir::flatten_ron_number_lists(&ron);
+        write!(f, "{ron}")
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct Binding {
     pub span: uiua::CodeSpan,
     pub func_id: uiua::FunctionId,
@@ -24,19 +32,19 @@ pub struct Binding {
     pub func: Function,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Struct {
     pub name: String,
     pub info: types::StructInfo,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Enum {
     pub name: String,
     pub info: types::EnumInfo,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Node {
     Input,
     Output,
@@ -45,16 +53,17 @@ pub enum Node {
     FuncImplPrim(uiua::ImplPrimitive),
     ModPrim(uiua::Primitive, Vec<Function>),
     ModImplPrim(uiua::ImplPrimitive, Vec<Function>),
+    // Call(…),
     // ...
 }
 
 /// Values output by a node
 pub type NodeMeta = Vec<ValueInfo>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct FunctionMeta {
-    inputs: Vec<ValueInfo>,
-    outputs: Vec<ValueInfo>,
+    pub inputs: Vec<ValueInfo>,
+    pub outputs: Vec<ValueInfo>,
 }
 
 pub type Function = crate::generic_ir::Function<FunctionMeta, Node, NodeMeta>;
@@ -62,7 +71,7 @@ pub type Function = crate::generic_ir::Function<FunctionMeta, Node, NodeMeta>;
 /// Symbolic shape
 pub type SymShape = Vec<Expr>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum ValueInfo {
     Bool(Option<bool>),
     Int(Option<i64>),
@@ -114,19 +123,20 @@ impl ValueInfo {
 }
 
 pub mod types {
+    use itertools::Itertools;
+    use serde::{Deserialize, Serialize};
+    use std::rc::Rc;
+
     use super::{SymShape, ValueInfo};
     use crate::mir::polynomial::Expr;
 
-    use itertools::Itertools;
-    use std::rc::Rc;
-
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize)]
     pub struct ArrayValue {
         pub shape: Vec<usize>,
         pub data: Vec<ValueInfo>,
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize)]
     pub enum ArrayInfo {
         /// Exact value known at compile time
         Known {
@@ -263,18 +273,18 @@ pub mod types {
         }
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize)]
     pub struct MapInfo {
         key_type: ValueInfo,
         value_type: ValueInfo,
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize)]
     pub struct StructInfo {
         fields: Rc<[(String, ValueInfo)]>,
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize)]
     pub struct EnumInfo {
         variants: Rc<[(String, StructInfo)]>,
     }

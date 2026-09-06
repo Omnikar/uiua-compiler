@@ -36,48 +36,84 @@ fn monomorphize_and_analyze(
     hir: &Hir,
     mir: &mut Mir,
 ) -> Result<mir::Function, Error> {
+    let mut graph = Graph::new();
+    let input_idx = graph.add_node(mir::Node::Input);
+    let mut graph_map = HashMap::new();
+    graph_map.insert(hir_func.input_idx, input_idx);
     let mut info_map = HashMap::new();
-    info_map.insert(hir_func.input_idx, inputs.iter().cloned().collect_vec());
-    // TODO: analyze_node in graph index order
+    info_map.insert(input_idx, inputs.iter().cloned().collect_vec());
+
     for node_idx in hir_func.graph.node_indices() {
-        analyze_node(node_idx, hir_func, &mut info_map, hir, mir)?;
+        analyze_node(
+            node_idx,
+            hir_func,
+            &mut graph,
+            &mut graph_map,
+            &mut info_map,
+            hir,
+            mir,
+        )?;
     }
-    todo!()
+    let input_idx = graph_map[&hir_func.input_idx];
+    let output_idx = graph_map[&hir_func.output_idx];
+    let outputs = info_map[&output_idx].clone();
+    Ok(mir::Function {
+        meta: mir::FunctionMeta {
+            inputs: inputs.to_owned(),
+            outputs,
+        },
+        graph,
+        input_idx,
+        output_idx,
+        node_metas: info_map,
+        spans: hir_func
+            .spans
+            .iter()
+            .map(|(k, v)| (graph_map[k], *v))
+            .collect(),
+    })
 }
 
 fn analyze_node(
-    node_idx: NodeIndex,
+    hir_node_idx: NodeIndex,
     hir_func: &hir::Function,
+    mir_graph: &mut Graph<mir::Node>,
+    graph_map: &mut HashMap<NodeIndex, NodeIndex>,
     info_map: &mut HashMap<NodeIndex, mir::NodeMeta>,
     hir: &Hir,
     mir: &mut Mir,
 ) -> Result<(), Error> {
-    let node = dbg!(&hir_func.graph[node_idx]);
+    let hir_node = &hir_func.graph[hir_node_idx];
 
     let input_infos = hir_func
         .graph
-        .edges(node_idx)
+        .edges(hir_node_idx)
         .sorted_by_key(|e| e.weight().1)
-        .map(|e| &info_map[&e.target()][e.weight().0])
+        .map(|e| &info_map[&graph_map[&e.target()]][e.weight().0])
         .collect_vec();
 
-    match node {
-        hir::Node::Input => return Ok(()),
+    match hir_node {
+        hir::Node::Input => {}
         hir::Node::Output => {
-            todo!("Idk");
+            let node_idx = mir_graph.add_node(mir::Node::Output);
+            graph_map.insert(hir_node_idx, node_idx);
+            info_map.insert(node_idx, input_infos.into_iter().cloned().collect());
         }
         hir::Node::Constant(value) => {
             let value_info = mir::ValueInfo::try_from(value)?;
+            let node_idx = mir_graph.add_node(mir::Node::Constant(value_info.clone()));
+            graph_map.insert(hir_node_idx, node_idx);
             info_map.insert(node_idx, [value_info].into());
         }
-        hir::Node::FuncPrim(primitive) => todo!(),
-        hir::Node::FuncImplPrim(impl_primitive) => todo!(),
-        hir::Node::ModPrim(primitive, functions) => todo!(),
-        hir::Node::ModImplPrim(impl_primitive, functions) => todo!(),
-        hir::Node::Call(function) => todo!(),
+        // hir::Node::FuncPrim(primitive) => todo!(),
+        // hir::Node::FuncImplPrim(impl_primitive) => todo!(),
+        // hir::Node::ModPrim(primitive, functions) => todo!(),
+        // hir::Node::ModImplPrim(impl_primitive, functions) => todo!(),
+        // hir::Node::Call(function) => todo!(),
+        _ => todo!("{hir_node:?}"),
     }
 
-    todo!()
+    Ok(())
 }
 
 #[derive(thiserror::Error, Debug)]
