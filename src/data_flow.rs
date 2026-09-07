@@ -185,7 +185,7 @@ fn process_node(uiua_node: &uiua::Node, func_graph: &mut WorkingFuncGraph) -> Re
         UNode::Mod(Pr::By, funcs, _span) => {
             let func = &funcs[0];
             let n_args = func.sig.args();
-            let preserved = func_graph.stack_n(n_args);
+            let preserved = func_graph.stack_n(n_args - 1);
             func_graph
                 .stack
                 .insert(func_graph.stack.len() - n_args, preserved);
@@ -219,7 +219,7 @@ fn process_node(uiua_node: &uiua::Node, func_graph: &mut WorkingFuncGraph) -> Re
         UNode::Mod(Pr::With, funcs, _span) => {
             let func = &funcs[0];
             let n_args = func.sig.args();
-            let preserved = func_graph.stack_n(n_args);
+            let preserved = func_graph.stack_n(n_args - 1);
             process_node(&func.node, func_graph)?;
             func_graph.stack.push(preserved);
         }
