@@ -193,4 +193,14 @@ float_funcs! {
     sinh, "hyperbolic sine", f64::sinh;
     cosh, "hyperbolic cosine", f64::cosh;
     tanh, "hyperbolic tangent", f64::tanh;
+
+    ln, "natural logarithm", f64::ln;
+    log2, "base-2 logarithm", f64::log2;
+    log10, "base-10 logarithm", f64::log10;
+    asin, "inverse sine", f64::asin;
+    acos, "inverse cosine", f64::acos;
+    atan, "inverse tangent", f64::atan;
+    asinh, "inverse hyperbolic sine", f64::asinh;
+    acosh, "inverse hyperbolic cosine", f64::acosh;
+    atanh, "inverse hyperbolic tangent", f64::atanh;
 }
