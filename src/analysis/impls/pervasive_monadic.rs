@@ -85,7 +85,7 @@ pub fn sign(input_info: &ValueInfo, _ctx: AnalyzeContext) -> SingleAnalyzeResult
         Ok(match scalar {
             S::Bool(_) => *scalar,
             S::Int(i) => S::Int(i.map(i64::signum)),
-            S::Float(f) => S::Float(f.map(|f| if f == 0.0 { 0.0 } else { f.signum() })),
+            S::Float(f) => S::Int(f.map(|f| if f == 0.0 { 0 } else { f.signum() as i64 })),
             S::Char(c) => {
                 S::Int(c.map(|c| i64::from(c.is_uppercase()) - i64::from(c.is_lowercase())))
             }
