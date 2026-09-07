@@ -2,15 +2,14 @@
 #![allow(clippy::cast_possible_truncation)]
 
 use super::{AnalyzeContext, Error, ErrorKind, SingleAnalyzeResult, ValueInfo, types};
-
 use types::ScalarInfo as S;
 
 fn pervasive_monadic(
     input_info: &ValueInfo,
-    scalar_func: impl Fn(&types::ScalarInfo) -> Result<types::ScalarInfo, Error> + Clone,
+    scalar_func: impl Fn(types::ScalarInfo) -> Result<types::ScalarInfo, Error> + Clone,
 ) -> SingleAnalyzeResult {
     Ok(match input_info {
-        ValueInfo::Scalar(scalar_info) => scalar_func(scalar_info).map(ValueInfo::Scalar)?,
+        ValueInfo::Scalar(scalar_info) => scalar_func(*scalar_info).map(ValueInfo::Scalar)?,
         ValueInfo::Array(array_info) => match &**array_info {
             types::ArrayInfo::Known { scalar_type, value } => {
                 // TODO: Size limit for pre-evaluation?
@@ -83,7 +82,7 @@ pub fn not(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult {
 pub fn sign(input_info: &ValueInfo, _ctx: AnalyzeContext) -> SingleAnalyzeResult {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
-            S::Bool(_) => *scalar,
+            S::Bool(_) => scalar,
             S::Int(i) => S::Int(i.map(i64::signum)),
             S::Float(f) => S::Int(f.map(|f| if f == 0.0 { 0 } else { f.signum() as i64 })),
             S::Char(c) => {
@@ -121,7 +120,7 @@ pub fn negate(input_info: &ValueInfo, _ctx: AnalyzeContext) -> SingleAnalyzeResu
 pub fn absolute_value(input_info: &ValueInfo, _ctx: AnalyzeContext) -> SingleAnalyzeResult {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
-            S::Bool(_) => *scalar,
+            S::Bool(_) => scalar,
             S::Int(i) => S::Int(i.map(i64::abs)),
             S::Float(f) => S::Float(f.map(f64::abs)),
             S::Char(c) => S::Char(c.map(|c| {
@@ -139,7 +138,7 @@ pub fn absolute_value(input_info: &ValueInfo, _ctx: AnalyzeContext) -> SingleAna
 pub fn floor(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
-            S::Bool(_) | S::Int(_) => *scalar,
+            S::Bool(_) | S::Int(_) => scalar,
             S::Float(f) => S::Int(f.map(|f| f.floor() as i64)),
             S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("floor"))?,
         })
@@ -149,7 +148,7 @@ pub fn floor(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult
 pub fn ceiling(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
-            S::Bool(_) | S::Int(_) => *scalar,
+            S::Bool(_) | S::Int(_) => scalar,
             S::Float(f) => S::Int(f.map(|f| f.ceil() as i64)),
             S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("ceiling"))?,
         })
@@ -159,7 +158,7 @@ pub fn ceiling(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResu
 pub fn round(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
-            S::Bool(_) | S::Int(_) => *scalar,
+            S::Bool(_) | S::Int(_) => scalar,
             S::Float(f) => S::Int(f.map(|f| f.round() as i64)),
             S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("round"))?,
         })
