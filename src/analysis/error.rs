@@ -30,7 +30,7 @@ pub enum ErrorKind {
 }
 
 impl FancyError {
-    fn eprint_simple<'a>(
+    fn simple<'a>(
         &self,
         parent_msg: impl ToString,
         source_msg: impl ToString,
@@ -66,23 +66,20 @@ impl FancyError {
             .unwrap();
     }
 
+    fn expected_numbers(&self, err: impl ToString, name: &str) {
+        self.simple(
+            err,
+            format!("{name} expects numbers"),
+            ["Characters produced here"],
+        );
+    }
+
     pub fn eprint(&self) {
         match &self.kind {
-            ErrorKind::UiuaValue(err) => self.eprint_simple(err, err, []),
-            err @ ErrorKind::NotChar => {
-                self.eprint_simple(err, "Not expects numbers", ["Characters produced here"]);
-            }
-
-            err @ ErrorKind::RecipChar => self.eprint_simple(
-                err,
-                "Reciprocal expects numbers",
-                ["Characters produced here"],
-            ),
-            err @ ErrorKind::SqrtChar => self.eprint_simple(
-                err,
-                "Square root expects numbers",
-                ["Characters produced here"],
-            ),
+            ErrorKind::UiuaValue(err) => self.simple(err, err, []),
+            err @ ErrorKind::NotChar => self.expected_numbers(err, "Not"),
+            err @ ErrorKind::RecipChar => self.expected_numbers(err, "Reciprocal"),
+            err @ ErrorKind::SqrtChar => self.expected_numbers(err, "Square root"),
         }
     }
 }
