@@ -15,6 +15,16 @@ pub fn monadic_impl(prim: uiua::Primitive) -> Option<MonadicImplFn> {
         Pr::Reciprocal => pm::reciprocal,
         Pr::Abs => pm::absolute_value,
         Pr::Sqrt => pm::sqrt,
+        Pr::Exp => pm::exponential,
+        Pr::Sin => pm::sine,
+        Pr::Cos => pm::cos,
+        Pr::Tan => pm::tan,
+        Pr::SinH => pm::sinh,
+        Pr::CosH => pm::cosh,
+        Pr::TanH => pm::tanh,
+        Pr::Floor => pm::floor,
+        Pr::Ceil => pm::ceiling,
+        Pr::Round => pm::round,
         _ => return None,
     })
 }

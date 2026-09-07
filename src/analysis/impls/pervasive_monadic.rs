@@ -1,4 +1,5 @@
 #![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_possible_truncation)]
 
 use super::{AnalyzeContext, Error, ErrorKind, SingleAnalyzeResult, ValueInfo, types};
 
@@ -52,13 +53,29 @@ fn pervasive_monadic(
     })
 }
 
+fn float_func(
+    input_info: &ValueInfo,
+    ctx: AnalyzeContext,
+    func: fn(f64) -> f64,
+    error: ErrorKind,
+) -> SingleAnalyzeResult {
+    pervasive_monadic(input_info, |scalar| {
+        Ok(match scalar {
+            S::Bool(b) => S::Float(b.map(|b| func(f64::from(b)))),
+            S::Int(i) => S::Float(i.map(|i| func(i as f64))),
+            S::Float(f) => S::Float(f.map(func)),
+            S::Char(_) => ctx.error(error)?,
+        })
+    })
+}
+
 pub fn not(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
             S::Bool(b) => S::Bool(b.map(|b| !b)),
             S::Int(i) => S::Int(i.map(|i| 1 - i)),
             S::Float(f) => S::Float(f.map(|f| 1.0 - f)),
-            S::Char(_) => ctx.error(ErrorKind::NotChar)?,
+            S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("not"))?,
         })
     })
 }
@@ -101,17 +118,6 @@ pub fn negate(input_info: &ValueInfo, _ctx: AnalyzeContext) -> SingleAnalyzeResu
     })
 }
 
-pub fn reciprocal(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult {
-    pervasive_monadic(input_info, |scalar| {
-        Ok(match scalar {
-            S::Bool(b) => S::Float(b.map(|b| f64::from(b).recip())),
-            S::Int(i) => S::Float(i.map(|i| (i as f64).recip())),
-            S::Float(f) => S::Float(f.map(f64::recip)),
-            S::Char(_) => ctx.error(ErrorKind::RecipChar)?,
-        })
-    })
-}
-
 pub fn absolute_value(input_info: &ValueInfo, _ctx: AnalyzeContext) -> SingleAnalyzeResult {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
@@ -130,13 +136,61 @@ pub fn absolute_value(input_info: &ValueInfo, _ctx: AnalyzeContext) -> SingleAna
     })
 }
 
-pub fn sqrt(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult {
+pub fn floor(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
-            S::Bool(_) => *scalar,
-            S::Int(i) => S::Float(i.map(|i| (i as f64).sqrt())),
-            S::Float(f) => S::Float(f.map(f64::sqrt)),
-            S::Char(_) => ctx.error(ErrorKind::SqrtChar)?,
+            S::Bool(_) | S::Int(_) => *scalar,
+            S::Float(f) => S::Int(f.map(|f| f.floor() as i64)),
+            S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("floor"))?,
         })
     })
+}
+
+pub fn ceiling(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult {
+    pervasive_monadic(input_info, |scalar| {
+        Ok(match scalar {
+            S::Bool(_) | S::Int(_) => *scalar,
+            S::Float(f) => S::Int(f.map(|f| f.ceil() as i64)),
+            S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("ceiling"))?,
+        })
+    })
+}
+
+pub fn round(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult {
+    pervasive_monadic(input_info, |scalar| {
+        Ok(match scalar {
+            S::Bool(_) | S::Int(_) => *scalar,
+            S::Float(f) => S::Int(f.map(|f| f.round() as i64)),
+            S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("round"))?,
+        })
+    })
+}
+
+/// Define analyses for functions that always expect numerical inputs
+/// and always produce floating-point outputs
+macro_rules! float_funcs {
+    ($($name:ident, $name_str:literal, $func:expr;)*) => {
+        $(
+            pub fn $name(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult {
+                float_func(
+                    input_info,
+                    ctx,
+                    $func,
+                    ErrorKind::ExpectedNumber($name_str),
+                )
+            }
+        )*
+    };
+}
+
+float_funcs! {
+    reciprocal, "reciprocal", f64::recip;
+    sqrt, "square root", f64::sqrt;
+    exponential, "exponential", f64::exp;
+    sine, "sine", f64::sin;
+    cos, "cosine", f64::cos;
+    tan, "tangent", f64::tan;
+    sinh, "hyperbolic sine", f64::sinh;
+    cosh, "hyperbolic cosine", f64::cosh;
+    tanh, "hyperbolic tangent", f64::tanh;
 }

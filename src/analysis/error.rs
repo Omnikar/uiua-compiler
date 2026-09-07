@@ -17,16 +17,12 @@ pub struct FancyError {
     pub kind: ErrorKind,
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, Clone, Copy)]
 pub enum ErrorKind {
     #[error("{0}")]
     UiuaValue(UiuaValueError),
-    #[error("Cannot not character")]
-    NotChar,
-    #[error("Cannot take the reciprocal of a character")]
-    RecipChar,
-    #[error("Cannot take the square root of a character")]
-    SqrtChar,
+    #[error("Cannot take the {0} of a character")]
+    ExpectedNumber(&'static str),
 }
 
 impl FancyError {
@@ -66,21 +62,26 @@ impl FancyError {
             .unwrap();
     }
 
-    fn expected_numbers(&self, err: impl ToString, name: &str) {
-        self.simple(
-            err,
-            format!("{name} expects numbers"),
-            ["Characters produced here"],
-        );
-    }
-
     pub fn eprint(&self) {
         match &self.kind {
             ErrorKind::UiuaValue(err) => self.simple(err, err, []),
-            err @ ErrorKind::NotChar => self.expected_numbers(err, "Not"),
-            err @ ErrorKind::RecipChar => self.expected_numbers(err, "Reciprocal"),
-            err @ ErrorKind::SqrtChar => self.expected_numbers(err, "Square root"),
+            err @ ErrorKind::ExpectedNumber(name) => self.simple(
+                err,
+                format!("{} expects numbers", capitalize_first_letter(name)),
+                ["Characters produced here"],
+            ),
         }
+    }
+}
+
+fn capitalize_first_letter(s: &str) -> Cow<'_, str> {
+    let mut chars = s.chars();
+    if let Some(c) = chars.next()
+        && c.is_lowercase()
+    {
+        c.to_uppercase().chain(chars).collect::<String>().into()
+    } else {
+        s.into()
     }
 }
 

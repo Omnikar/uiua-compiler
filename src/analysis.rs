@@ -172,7 +172,7 @@ impl AnalyzeContext<'_> {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, Clone, Copy)]
 pub enum UiuaValueError {
     #[error("Could not infer array type")]
     NoArrayType,
