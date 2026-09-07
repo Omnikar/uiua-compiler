@@ -1,4 +1,5 @@
 mod pervasive_monadic;
+mod pervasive_dyadic;
 
 use super::{AnalyzeContext, Error, ErrorKind, ValueInfo, types};
 use crate::hir;
@@ -40,6 +41,22 @@ pub fn monadic_prim(prim: hir::Prim) -> Option<MonadicImplFn> {
             Ip::ASinH => pm::asinh,
             Ip::ACosH => pm::acosh,
             Ip::ATanH => pm::atanh,
+            _ => return None,
+        },
+    })
+}
+
+pub type DyadicImplFn = fn(&ValueInfo, &ValueInfo, AnalyzeContext) -> SingleAnalyzeResult;
+pub fn dyadic_prim(prim: hir::Prim) -> Option<DyadicImplFn> {
+    use pervasive_dyadic as pd;
+    use uiua::ImplPrimitive as Ip;
+    use uiua::Primitive as Pr;
+    Some(match prim {
+        hir::Prim::Prim(prim) => match prim {
+            Pr::Eq => pd::equals,
+            _ => return None,
+        },
+        hir::Prim::Impl(impl_prim) => match impl_prim {
             _ => return None,
         },
     })

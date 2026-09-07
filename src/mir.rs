@@ -164,6 +164,17 @@ pub mod types {
         Char(Option<char>),
     }
 
+    impl ScalarInfo {
+        pub fn type_name(&self) -> &'static str {
+            match self {
+                ScalarInfo::Bool(_) => "boolean",
+                ScalarInfo::Int(_) => "integer",
+                ScalarInfo::Float(_) => "float",
+                ScalarInfo::Char(_) => "character",
+            }
+        }
+    }
+
     #[derive(Debug, Clone, Serialize)]
     pub struct ArrayValue {
         pub shape: Vec<usize>,

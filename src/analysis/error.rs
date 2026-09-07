@@ -23,14 +23,16 @@ pub enum ErrorKind {
     UiuaValue(UiuaValueError),
     #[error("Cannot take the {0} of a character")]
     ExpectedNumber(&'static str),
+    #[error("Incompatible types: {0} and {1}")]
+    IncompatibleTypes(&'static str, &'static str),
 }
 
 impl FancyError {
-    fn simple<'a>(
+    fn simple(
         &self,
         parent_msg: impl ToString,
         source_msg: impl ToString,
-        input_msgs: impl IntoIterator<Item = &'a str>,
+        input_msgs: impl IntoIterator<Item = impl ToString>,
     ) {
         let (source_path, source, range) = span_to_ariadne(&self.span, &self.files);
         let (input_source_paths, _input_sources, input_ranges): (Vec<_>, Vec<_>, Vec<_>) = self
@@ -64,11 +66,16 @@ impl FancyError {
 
     pub fn eprint(&self) {
         match &self.kind {
-            ErrorKind::UiuaValue(err) => self.simple(err, err, []),
+            ErrorKind::UiuaValue(err) => self.simple(err, err, [] as [&str; 0]),
             err @ ErrorKind::ExpectedNumber(name) => self.simple(
                 err,
                 format!("{} expects numbers", capitalize_first_letter(name)),
                 ["Characters produced here"],
+            ),
+            err @ ErrorKind::IncompatibleTypes(left, right) => self.simple(
+                err,
+                "This operation",
+                [format!("Found {left} here"), format!("Found {right} here")],
             ),
         }
     }

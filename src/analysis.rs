@@ -163,6 +163,14 @@ fn analyze_node(
             graph_map.insert(hir_node_idx, node_idx);
             info_map.insert(node_idx, [impl_fn(input_infos[0], ctx)?].into());
         }
+        hir::Node::FuncPrim(prim) if let Some(impl_fn) = impls::dyadic_prim(*prim) => {
+            let node_idx = mir_graph.add_node(mir::Node::FuncPrim(prim.into()));
+            graph_map.insert(hir_node_idx, node_idx);
+            info_map.insert(
+                node_idx,
+                [impl_fn(input_infos[0], input_infos[1], ctx)?].into(),
+            );
+        }
         // hir::Node::FuncPrim(primitive) => todo!(),
         // hir::Node::FuncImplPrim(impl_primitive) => todo!(),
         // hir::Node::ModPrim(primitive, functions) => todo!(),
