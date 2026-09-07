@@ -15,14 +15,15 @@ mod data_flow;
 mod analysis;
 
 use clap::Parser;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
 #[command(about = "Uiua native compiler")]
 struct Args {
+    #[arg(help = "Input file path, - for stdin")]
     filepath: String,
-    #[arg(short)]
+    #[arg(short, help = "Output file path")]
     output: Option<String>,
     // TODO: Eventually change the default to executable
     // TODO: Infer based on output filename extension when not provided
@@ -43,10 +44,11 @@ enum EmitFormat {
 }
 impl std::fmt::Display for EmitFormat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        clap::ValueEnum::to_possible_value(self)
-            .unwrap()
-            .get_name()
-            .fmt(f)
+        if let Some(val) = clap::ValueEnum::to_possible_value(self) {
+            val.get_name().fmt(f)
+        } else {
+            write!(f, "given format")
+        }
     }
 }
 
@@ -127,8 +129,13 @@ impl LoweringState {
             (Ls::Uasm(uasm), Ef::Hir) => Ls::Hir(Box::new(data_flow::construct_hir(uasm)?)),
             (Ls::Hir(hir), Ef::Dot) => {
                 let mut result = String::new();
-                for binding in &hir.bindings {
-                    let dot = petgraph::dot::Dot::new(&binding.func.graph);
+                for (func, name) in hir
+                    .bindings
+                    .iter()
+                    .map(|binding| (&binding.func, binding.func_id.to_string()))
+                    .chain(hir.main.as_ref().map(|(func, _)| (func, "main".into())))
+                {
+                    let dot = petgraph::dot::Dot::new(&func.graph);
                     let mut dot_s = format!("{dot:?}")
                         .strip_prefix("digraph {\n")
                         .unwrap()
@@ -138,17 +145,16 @@ impl LoweringState {
     node [shape=box]
     node [fontname="Uiua386"]
     edge [fontname="Uiua386"]
-    label = "{}"
+    label = "{name}"
     labelloc = "t"
-{dot_s}"#,
-                        binding.func_id
+{dot_s}"#
                     );
                     result.push_str(&dot_s);
                 }
                 Self::Dot(result)
             }
             (Ls::Hir(hir), Ef::Mir) => Ls::Mir(Box::new(analysis::construct_mir(hir)?)),
-            (Ls::Ua(_), ef) => self.convert_to(Ef::Uasm)?.convert_to(ef)?,
+            (Ls::Ua(_) | Ls::UaStr(_), ef) => self.convert_to(Ef::Uasm)?.convert_to(ef)?,
             (Ls::Uasm(_), ef) => self.convert_to(Ef::Hir)?.convert_to(ef)?,
             (Ls::Hir(_), ef) => self.convert_to(Ef::Mir)?.convert_to(ef)?,
             _ => return Err(ProgramError::InvalidConversion(self.cur_format(), format)),
@@ -179,7 +185,7 @@ impl LoweringState {
 fn run() -> Result<(), ProgramError> {
     let args = Args::try_parse()?;
 
-    let path = PathBuf::from(args.filepath);
+    let path = PathBuf::from(&args.filepath);
     let mut state = match path.extension() {
         Some(ext) if ext == "ua" => LoweringState::Ua(path.clone()),
         Some(ext) if ext == "uasm" => {
@@ -190,6 +196,11 @@ fn run() -> Result<(), ProgramError> {
             let hir_text = std::fs::read_to_string(&path)?;
             let hir: hir::Hir = ron::from_str(&hir_text)?;
             LoweringState::Hir(Box::new(hir))
+        }
+        None if args.filepath == "-" => {
+            let mut ua_text = String::new();
+            std::io::stdin().read_to_string(&mut ua_text)?;
+            LoweringState::UaStr(ua_text)
         }
         _ => return Err(ProgramError::WrongFileType),
     };
