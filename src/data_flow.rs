@@ -2,7 +2,7 @@ use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 
 use crate::generic_ir::{Graph, NodeIndex};
-use crate::hir::{Binding, Enum, Function, Hir, Node, Struct};
+use crate::hir::{Binding, Enum, Function, Hir, Node, Prim, Struct};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -301,11 +301,13 @@ fn process_node(uiua_node: &uiua::Node, func_graph: &mut WorkingFuncGraph) -> Re
         // ---
         _ if let Some((node, span)) = {
             match uiua_node {
-                UNode::Prim(prim, span) => Some((Node::FuncPrim(*prim), span)),
-                UNode::ImplPrim(impl_prim, span) => Some((Node::FuncImplPrim(*impl_prim), span)),
+                UNode::Prim(prim, span) => Some((Node::FuncPrim(Prim::Prim(*prim)), span)),
+                UNode::ImplPrim(impl_prim, span) => {
+                    Some((Node::FuncPrim(Prim::Impl(*impl_prim)), span))
+                }
                 UNode::Mod(prim, funcs, span) => Some((
                     Node::ModPrim(
-                        *prim,
+                        Prim::Prim(*prim),
                         funcs
                             .iter()
                             .map(|sig_node| simulate_data_flow(&sig_node.node))
@@ -314,8 +316,8 @@ fn process_node(uiua_node: &uiua::Node, func_graph: &mut WorkingFuncGraph) -> Re
                     span,
                 )),
                 UNode::ImplMod(impl_prim, funcs, span) => Some((
-                    Node::ModImplPrim(
-                        *impl_prim,
+                    Node::ModPrim(
+                        Prim::Impl(*impl_prim),
                         funcs
                             .iter()
                             .map(|sig_node| simulate_data_flow(&sig_node.node))

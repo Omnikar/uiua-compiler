@@ -45,15 +45,19 @@ pub struct Enum {
     pub variants: Vec<Struct>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Prim {
+    Prim(uiua::Primitive),
+    Impl(uiua::ImplPrimitive),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Node {
     Input,
     Output,
     Constant(uiua::Value),
-    FuncPrim(uiua::Primitive),
-    FuncImplPrim(uiua::ImplPrimitive),
-    ModPrim(uiua::Primitive, Vec<Function>),
-    ModImplPrim(uiua::ImplPrimitive, Vec<Function>),
+    FuncPrim(Prim),
+    ModPrim(Prim, Vec<Function>),
     Call(uiua::Function),
 }
 impl crate::generic_ir::FunctionNode for Node {

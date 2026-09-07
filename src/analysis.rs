@@ -159,14 +159,7 @@ fn analyze_node(
             info_map.insert(node_idx, [value_info].into());
         }
         hir::Node::FuncPrim(prim) if let Some(impl_fn) = impls::monadic_prim(*prim) => {
-            let node_idx = mir_graph.add_node(mir::Node::FuncPrim(*prim));
-            graph_map.insert(hir_node_idx, node_idx);
-            info_map.insert(node_idx, [impl_fn(input_infos[0], ctx)?].into());
-        }
-        hir::Node::FuncImplPrim(impl_prim)
-            if let Some(impl_fn) = impls::monadic_impl_prim(*impl_prim) =>
-        {
-            let node_idx = mir_graph.add_node(mir::Node::FuncImplPrim(*impl_prim));
+            let node_idx = mir_graph.add_node(mir::Node::FuncPrim(prim.into()));
             graph_map.insert(hir_node_idx, node_idx);
             info_map.insert(node_idx, [impl_fn(input_infos[0], ctx)?].into());
         }

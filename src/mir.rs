@@ -45,15 +45,32 @@ pub struct Enum {
     pub info: types::EnumInfo,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Prim {
+    Prim(uiua::Primitive),
+    Impl(uiua::ImplPrimitive),
+}
+impl From<crate::hir::Prim> for Prim {
+    fn from(prim: crate::hir::Prim) -> Self {
+        match prim {
+            crate::hir::Prim::Prim(prim) => Self::Prim(prim),
+            crate::hir::Prim::Impl(impl_prim) => Self::Impl(impl_prim),
+        }
+    }
+}
+impl From<&crate::hir::Prim> for Prim {
+    fn from(prim: &crate::hir::Prim) -> Self {
+        Self::from(*prim)
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub enum Node {
     Input,
     Output,
     Constant(ValueInfo),
-    FuncPrim(uiua::Primitive),
-    FuncImplPrim(uiua::ImplPrimitive),
-    ModPrim(uiua::Primitive, Vec<Function>),
-    ModImplPrim(uiua::ImplPrimitive, Vec<Function>),
+    FuncPrim(Prim),
+    ModPrim(Prim, Vec<Function>),
     // Call(…),
     // ...
 }
