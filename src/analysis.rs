@@ -1,4 +1,5 @@
 mod error;
+mod impls;
 
 use itertools::Itertools;
 use petgraph::visit::EdgeRef;
@@ -7,7 +8,7 @@ use std::rc::Rc;
 
 use crate::generic_ir::{Graph, NodeIndex};
 use crate::hir::{self, Hir};
-use crate::mir::{self, Mir, ValueInfo};
+use crate::mir::{self, Mir, ValueInfo, types};
 use error::{ErrorKind, FancyError};
 
 #[derive(thiserror::Error, Debug)]
@@ -111,6 +112,12 @@ fn analyze_node(
         })
         .unzip();
 
+    let ctx = AnalyzeContext {
+        hir,
+        span,
+        input_spans: &input_spans,
+    };
+
     match hir_node {
         hir::Node::Input => {}
         hir::Node::Output => {
@@ -131,15 +138,10 @@ fn analyze_node(
             graph_map.insert(hir_node_idx, node_idx);
             info_map.insert(node_idx, [value_info].into());
         }
-        hir::Node::FuncPrim(uiua::Primitive::Sqrt) => {
-            let node_idx = mir_graph.add_node(mir::Node::FuncPrim(uiua::Primitive::Sqrt));
+        hir::Node::FuncPrim(prim) if let Some(impl_fn) = impls::monadic_impl(*prim) => {
+            let node_idx = mir_graph.add_node(mir::Node::FuncPrim(*prim));
             graph_map.insert(hir_node_idx, node_idx);
-
-            let input_info = input_infos[0];
-            info_map.insert(
-                node_idx,
-                [analyze_sqrt(input_info, hir, span, &input_spans)?].into(),
-            );
+            info_map.insert(node_idx, [impl_fn(input_infos[0], ctx)?].into());
         }
         // hir::Node::FuncPrim(primitive) => todo!(),
         // hir::Node::FuncImplPrim(impl_primitive) => todo!(),
@@ -152,63 +154,22 @@ fn analyze_node(
     Ok(())
 }
 
-fn analyze_sqrt(
-    input_info: &ValueInfo,
-    hir: &Hir,
-    span: &uiua::Span,
-    input_spans: &[&uiua::Span],
-) -> Result<ValueInfo, Error> {
-    Ok(match input_info {
-        ValueInfo::Bool(_) => input_info.clone(),
-        #[allow(clippy::cast_precision_loss)]
-        ValueInfo::Int(i) => ValueInfo::Float(i.map(|i| (i as f64).sqrt())),
-        ValueInfo::Float(f) => ValueInfo::Float(f.map(f64::sqrt)),
-        ValueInfo::Char(_) => {
-            return Err(Error::FancyError(FancyError {
-                files: Rc::clone(&hir.files),
-                span: span.clone(),
-                input_spans: input_spans.iter().map(|&x| x.clone()).collect(),
-                kind: ErrorKind::SqrtChar,
-            }));
-        }
-        ValueInfo::Array(array_info) => match &**array_info {
-            mir::types::ArrayInfo::Known { scalar_type, value } => {
-                let scalar_type = analyze_sqrt(scalar_type, hir, span, input_spans)?;
-                let value = mir::types::ArrayValue {
-                    shape: value.shape.clone(),
-                    data: value
-                        .data
-                        .iter()
-                        .map(|x| analyze_sqrt(x, hir, span, input_spans))
-                        .collect::<Result<Vec<_>, _>>()?,
-                };
-                ValueInfo::Array(Box::new(mir::types::ArrayInfo::Known {
-                    scalar_type,
-                    value,
-                }))
-            }
-            mir::types::ArrayInfo::Ranked { scalar_type, shape } => {
-                let scalar_type = analyze_sqrt(scalar_type, hir, span, input_spans)?;
-                ValueInfo::Array(Box::new(mir::types::ArrayInfo::Ranked {
-                    scalar_type,
-                    shape: shape.clone(),
-                }))
-            }
-            mir::types::ArrayInfo::Unranked {
-                scalar_type,
-                shape_prefix,
-                shape_suffix,
-            } => {
-                let scalar_type = analyze_sqrt(scalar_type, hir, span, input_spans)?;
-                ValueInfo::Array(Box::new(mir::types::ArrayInfo::Unranked {
-                    scalar_type,
-                    shape_prefix: shape_prefix.clone(),
-                    shape_suffix: shape_suffix.clone(),
-                }))
-            }
-        },
-        _ => todo!(),
-    })
+#[derive(Clone, Copy)]
+struct AnalyzeContext<'a> {
+    hir: &'a Hir,
+    span: &'a uiua::Span,
+    input_spans: &'a [&'a uiua::Span],
+}
+
+impl AnalyzeContext<'_> {
+    fn error<T>(&self, kind: ErrorKind) -> Result<T, Error> {
+        Err(Error::FancyError(FancyError {
+            files: Rc::clone(&self.hir.files),
+            span: self.span.clone(),
+            input_spans: self.input_spans.iter().map(|&x| x.clone()).collect(),
+            kind,
+        }))
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -221,20 +182,28 @@ impl TryFrom<&uiua::Value> for ValueInfo {
     type Error = UiuaValueError;
     fn try_from(value: &uiua::Value) -> Result<Self, Self::Error> {
         Ok(if value.rank() == 0 {
-            match value {
+            Self::Scalar(match value {
                 uiua::Value::Byte(array) => match *array.elements().next().unwrap() {
-                    b @ (0 | 1) => Self::Bool(Some(b != 0)),
-                    i => Self::Int(Some(i.into())),
+                    b @ (0 | 1) => types::ScalarInfo::Bool(Some(b != 0)),
+                    i => types::ScalarInfo::Int(Some(i.into())),
                 },
                 uiua::Value::Num(array) => match *array.elements().next().unwrap() {
-                    b @ (0.0 | 1.0) => Self::Bool(Some(b != 0.0)),
-                    // f if let Ok(i) = i64::try_from(f) => Self::Int(Some(i)),
-                    f => Self::Float(Some(f)),
+                    b @ (0.0 | 1.0) => types::ScalarInfo::Bool(Some(b != 0.0)),
+                    f => {
+                        if f.fract() == 0.0 && f.is_finite() && f.abs() < 2.0f64.powi(53) {
+                            #[allow(clippy::cast_possible_truncation)]
+                            types::ScalarInfo::Int(Some(f as i64))
+                        } else {
+                            types::ScalarInfo::Float(Some(f))
+                        }
+                    }
                 },
-                uiua::Value::Char(array) => Self::Char(Some(*array.elements().next().unwrap())),
+                uiua::Value::Char(array) => {
+                    types::ScalarInfo::Char(Some(*array.elements().next().unwrap()))
+                }
                 uiua::Value::Box(array) => {
                     let val = array.elements().next().unwrap();
-                    Self::try_from(&val.0)?
+                    return Self::try_from(&val.0);
                 }
                 uiua::Value::Complex(_array) => {
                     unimplemented!("Complex numbers are currently not supported")
@@ -242,7 +211,7 @@ impl TryFrom<&uiua::Value> for ValueInfo {
                 uiua::Value::Mv(_array) => {
                     unimplemented!("Multivectors are currently not supported")
                 }
-            }
+            })
         } else {
             let shape = value.shape.iter().copied().collect_vec();
             let data = value
@@ -256,9 +225,9 @@ impl TryFrom<&uiua::Value> for ValueInfo {
                 .reduce(|x, y| x?.supertype(&y?))
                 .flatten()
                 .ok_or(UiuaValueError::NoArrayType)?;
-            Self::Array(Box::new(mir::types::ArrayInfo::Known {
+            Self::Array(Box::new(types::ArrayInfo::Known {
                 scalar_type,
-                value: mir::types::ArrayValue { shape, data },
+                value: types::ArrayValue { shape, data },
             }))
         })
     }

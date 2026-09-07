@@ -74,10 +74,7 @@ pub type SymShape = Vec<Expr>;
 
 #[derive(Debug, Clone, Serialize)]
 pub enum ValueInfo {
-    Bool(Option<bool>),
-    Int(Option<i64>),
-    Float(Option<f64>),
-    Char(Option<char>),
+    Scalar(types::ScalarInfo),
     Array(Box<types::ArrayInfo>),
     Map(Box<types::MapInfo>),
     Struct(types::StructInfo),
@@ -92,29 +89,40 @@ impl ValueInfo {
                 match ($lhs, $rhs) {
                     $(
                         ($variant(l), $variant(r)) => {
-                            return if l == r {
+                            if l == r {
                                 Some($variant(*l))
                             } else {
                                 Some($variant(None))
-                            };
+                            }
                         }
                     )+
-                    _ => {}
+                    _ => None
                 }
             };
         }
-        scalar_supertype_ident!(self, rhs; Self::Bool, Self::Int, Self::Float, Self::Char);
         match (self, rhs) {
-            (Self::Bool(b), Self::Int(i)) | (Self::Int(i), Self::Bool(b)) => Some(Self::Int(
-                b.map(i64::from).and_then(|b| i.filter(|i| b == *i)),
-            )),
-            (Self::Bool(b), other) | (other, Self::Bool(b)) => {
-                Self::Int(b.map(i64::from)).supertype(other)
+            (Self::Scalar(lhs), Self::Scalar(rhs)) => {
+                use types::ScalarInfo as S;
+                if let Some(st) =
+                    scalar_supertype_ident!(lhs, rhs; S::Bool, S::Int, S::Float, S::Char)
+                {
+                    return Some(Self::Scalar(st));
+                }
+                match (lhs, rhs) {
+                    (S::Bool(b), S::Int(i)) | (S::Int(i), S::Bool(b)) => Some(Self::Scalar(
+                        S::Int(b.map(i64::from).and_then(|b| i.filter(|i| b == *i))),
+                    )),
+                    (S::Bool(b), other) | (other, S::Bool(b)) => {
+                        Self::Scalar(S::Int(b.map(i64::from))).supertype(&Self::Scalar(*other))
+                    }
+                    #[allow(clippy::cast_precision_loss, clippy::float_cmp)]
+                    (S::Int(i), S::Float(f)) | (S::Float(f), S::Int(i)) => Some(Self::Scalar(
+                        S::Float(i.map(|i| i as f64).and_then(|i| f.filter(|f| i == *f))),
+                    )),
+                    _ => None,
+                }
             }
-            #[allow(clippy::cast_precision_loss, clippy::float_cmp)]
-            (Self::Int(i), Self::Float(f)) | (Self::Float(f), Self::Int(i)) => Some(Self::Float(
-                i.map(|i| i as f64).and_then(|i| f.filter(|f| i == *f)),
-            )),
+
             (Self::Array(lhs), Self::Array(rhs)) => {
                 lhs.supertype(rhs).map(Box::new).map(Self::Array)
             }
@@ -130,6 +138,14 @@ pub mod types {
 
     use super::{SymShape, ValueInfo};
     use crate::mir::polynomial::Expr;
+
+    #[derive(Debug, Clone, Copy, Serialize)]
+    pub enum ScalarInfo {
+        Bool(Option<bool>),
+        Int(Option<i64>),
+        Float(Option<f64>),
+        Char(Option<char>),
+    }
 
     #[derive(Debug, Clone, Serialize)]
     pub struct ArrayValue {
@@ -276,17 +292,17 @@ pub mod types {
 
     #[derive(Debug, Clone, Serialize)]
     pub struct MapInfo {
-        key_type: ValueInfo,
-        value_type: ValueInfo,
+        pub key_type: ValueInfo,
+        pub value_type: ValueInfo,
     }
 
     #[derive(Debug, Clone, Serialize)]
     pub struct StructInfo {
-        fields: Rc<[(String, ValueInfo)]>,
+        pub fields: Rc<[(String, ValueInfo)]>,
     }
 
     #[derive(Debug, Clone, Serialize)]
     pub struct EnumInfo {
-        variants: Rc<[(String, StructInfo)]>,
+        pub variants: Rc<[(String, StructInfo)]>,
     }
 }
