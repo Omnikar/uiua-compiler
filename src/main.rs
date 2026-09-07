@@ -220,11 +220,12 @@ fn run() -> Result<(), ProgramError> {
 }
 
 fn main() {
-    match run() {
-        Ok(()) => return,
-        Err(ProgramError::ClapError(err)) => err.exit(),
-        Err(ProgramError::AnalysisError(analysis::Error::FancyError(err))) => err.eprint(),
-        Err(e) => eprintln!("error: {e}"),
+    let Err(err) = run() else { return };
+
+    match err {
+        ProgramError::ClapError(err) => err.exit(),
+        ProgramError::AnalysisError(analysis::Error::FancyError(err)) => err.eprint(),
+        err => eprintln!("error: {err}"),
     }
     std::process::exit(1);
 }
