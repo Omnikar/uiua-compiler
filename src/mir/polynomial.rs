@@ -3,10 +3,6 @@ use std::collections::HashMap;
 use std::ops::{Add, Mul, Sub};
 use std::rc::Rc;
 
-thread_local! {
-    static NVARS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-}
-
 /// A multivariate polynomial of arbitrarily many variables, used to track relations between array axes of unknown length
 ///
 /// The polynomial is represented as a hashmap from exponent values to coefficients. For example, an entry of `[1, 2] -> 3` represents the term `3x₀x₁²` in the polynomial.
@@ -19,6 +15,10 @@ pub struct Expr {
 impl Expr {
     /// Create a new variable that has never been created before
     pub fn new_var() -> Self {
+        thread_local! {
+            static NVARS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+        }
+
         let nvars = NVARS.get();
         let mut exponents = vec![0; nvars];
         exponents.push(1);

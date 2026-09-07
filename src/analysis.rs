@@ -88,6 +88,24 @@ fn monomorphize_and_analyze(
     })
 }
 
+#[derive(Clone, Copy)]
+struct AnalyzeContext<'a> {
+    hir: &'a Hir,
+    span: &'a uiua::Span,
+    input_spans: &'a [&'a uiua::Span],
+}
+
+impl AnalyzeContext<'_> {
+    fn error<T>(&self, kind: ErrorKind) -> Result<T, Error> {
+        Err(Error::FancyError(FancyError {
+            files: Rc::clone(&self.hir.files),
+            span: self.span.clone(),
+            input_spans: self.input_spans.iter().map(|&x| x.clone()).collect(),
+            kind,
+        }))
+    }
+}
+
 fn analyze_node(
     hir_node_idx: NodeIndex,
     hir_func: &hir::Function,
@@ -119,7 +137,9 @@ fn analyze_node(
     };
 
     match hir_node {
-        hir::Node::Input => {}
+        hir::Node::Input => {
+            // Input node is expected to already exist by this point; do nothing
+        }
         hir::Node::Output => {
             let node_idx = mir_graph.add_node(mir::Node::Output);
             graph_map.insert(hir_node_idx, node_idx);
@@ -159,24 +179,6 @@ fn analyze_node(
     }
 
     Ok(())
-}
-
-#[derive(Clone, Copy)]
-struct AnalyzeContext<'a> {
-    hir: &'a Hir,
-    span: &'a uiua::Span,
-    input_spans: &'a [&'a uiua::Span],
-}
-
-impl AnalyzeContext<'_> {
-    fn error<T>(&self, kind: ErrorKind) -> Result<T, Error> {
-        Err(Error::FancyError(FancyError {
-            files: Rc::clone(&self.hir.files),
-            span: self.span.clone(),
-            input_spans: self.input_spans.iter().map(|&x| x.clone()).collect(),
-            kind,
-        }))
-    }
 }
 
 #[derive(thiserror::Error, Debug, Clone, Copy)]
