@@ -81,6 +81,20 @@ pub enum Node {
     // Call(…),
     // ...
 }
+impl crate::generic_ir::FunctionNode for Node {
+    fn is_input(&self) -> bool {
+        matches!(self, Self::Input)
+    }
+    fn is_output(&self) -> bool {
+        matches!(self, Self::Output)
+    }
+    fn input() -> Self {
+        Self::Input
+    }
+    fn output() -> Self {
+        Self::Output
+    }
+}
 
 /// Values output by a node
 pub type NodeMeta = Vec<ValueInfo>;
