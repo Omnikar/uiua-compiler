@@ -33,10 +33,7 @@ pub struct Binding {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Struct {
     pub name: String,
-
-    // We store type annotations as raw Uiua values for now,
-    // they will be interpreted later.
-    pub fields: Vec<(String, uiua::Value)>,
+    pub fields: Vec<(String, uiua::Type)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

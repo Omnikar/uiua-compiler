@@ -426,7 +426,9 @@ fn struct_from_module(
             if let Some(field_fn_index) = get_module_item_index(&field, module, FnLookup, uasm) {
                 ignored_bindings.insert(field_fn_index);
             }
-            struct_def.fields.push((field, elem_type.as_ref().clone()));
+            struct_def
+                .fields
+                .push((field, uiua::Type::from_spec(elem_type.as_ref()).unwrap()));
         }
         Some((struct_def, ignored_bindings))
     } else {
