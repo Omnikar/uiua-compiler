@@ -14,7 +14,6 @@ mod mir;
 mod data_flow;
 /// Static analysis of type, rank, and shape
 mod analysis;
-mod analysis_new;
 
 use clap::Parser;
 use std::io::{Read, Write};
@@ -76,9 +75,6 @@ enum ProgramError {
 
     #[error("{0}")]
     AnalysisError(#[from] analysis::Error),
-
-    #[error("{0}")]
-    AnalysisNewError(#[from] analysis_new::Error),
 
     #[error("{0}")]
     DeserializeError(#[from] ron::error::SpannedError),
@@ -158,7 +154,7 @@ impl LoweringState {
                 }
                 Self::Dot(result)
             }
-            (Ls::Hir(hir), Ef::Mir) => Ls::Mir(Box::new(analysis_new::construct_mir(hir)?)),
+            (Ls::Hir(hir), Ef::Mir) => Ls::Mir(Box::new(analysis::construct_mir(hir)?)),
             (Ls::Ua(_) | Ls::UaStr(_), ef) => self.convert_to(Ef::Uasm)?.convert_to(ef)?,
             (Ls::Uasm(_), ef) => self.convert_to(Ef::Hir)?.convert_to(ef)?,
             (Ls::Hir(_), ef) => self.convert_to(Ef::Mir)?.convert_to(ef)?,
@@ -230,7 +226,6 @@ fn main() {
     match err {
         ProgramError::ClapError(err) => err.exit(),
         ProgramError::AnalysisError(analysis::Error::FancyError(err)) => err.eprint(),
-        ProgramError::AnalysisNewError(analysis_new::Error::FancyError(err)) => err.eprint(),
         err => eprintln!("error: {err}"),
     }
     std::process::exit(1);
