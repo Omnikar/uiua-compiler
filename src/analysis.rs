@@ -14,7 +14,7 @@ use error::{ErrorKind, FancyError};
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("{0}")]
-    FancyError(FancyError),
+    FancyError(Box<FancyError>),
 }
 
 pub fn construct_mir(hir: &hir::Hir) -> Result<mir::Mir, Error> {
@@ -48,15 +48,23 @@ fn monomorphize_and_analyze(
     let mut info_map = HashMap::new();
     info_map.insert(input_idx, inputs.iter().cloned().collect_vec());
 
+    let mut translation_ctx = TranslationContext {
+        mir_graph: &mut graph,
+        graph_map: &mut graph_map,
+        info_map: &mut info_map,
+        mir,
+    };
+
     for node_idx in hir_func.graph.node_indices() {
         analyze_node(
             node_idx,
             hir_func,
-            &mut graph,
-            &mut graph_map,
-            &mut info_map,
+            // &mut graph,
+            // &mut graph_map,
+            // &mut info_map,
             hir,
-            mir,
+            // mir,
+            &mut translation_ctx,
         )?;
     }
     for edge_idx in hir_func.graph.edge_indices() {
@@ -90,30 +98,38 @@ fn monomorphize_and_analyze(
 
 #[derive(Clone, Copy)]
 struct AnalyzeContext<'a> {
-    hir: &'a Hir,
     span: &'a uiua::Span,
     input_spans: &'a [&'a uiua::Span],
+    hir: &'a Hir,
+}
+
+struct TranslationContext<'a> {
+    mir_graph: &'a mut Graph<mir::Node>,
+    graph_map: &'a mut HashMap<NodeIndex, NodeIndex>,
+    info_map: &'a mut HashMap<NodeIndex, mir::NodeMeta>,
+    mir: &'a mut Mir,
 }
 
 impl AnalyzeContext<'_> {
     fn error<T>(&self, kind: ErrorKind) -> Result<T, Error> {
-        Err(Error::FancyError(FancyError {
+        Err(Error::FancyError(Box::new(FancyError {
             files: Rc::clone(&self.hir.files),
             span: self.span.clone(),
             input_spans: self.input_spans.iter().map(|&x| x.clone()).collect(),
             kind,
-        }))
+        })))
     }
 }
 
 fn analyze_node(
     hir_node_idx: NodeIndex,
     hir_func: &hir::Function,
-    mir_graph: &mut Graph<mir::Node>,
-    graph_map: &mut HashMap<NodeIndex, NodeIndex>,
-    info_map: &mut HashMap<NodeIndex, mir::NodeMeta>,
+    // mir_graph: &mut Graph<mir::Node>,
+    // graph_map: &mut HashMap<NodeIndex, NodeIndex>,
+    // info_map: &mut HashMap<NodeIndex, mir::NodeMeta>,
     hir: &Hir,
-    mir: &mut Mir,
+    tctx: &mut TranslationContext,
+    // mir: &mut Mir,
 ) -> Result<(), Error> {
     let hir_node = &hir_func.graph[hir_node_idx];
     let span = &hir.spans[hir_func.spans.get(&hir_node_idx).copied().unwrap_or(0)];
@@ -124,16 +140,16 @@ fn analyze_node(
         .sorted_by_key(|e| e.weight().1)
         .map(|e| {
             (
-                &info_map[&graph_map[&e.target()]][e.weight().0],
+                tctx.info_map[&tctx.graph_map[&e.target()]][e.weight().0].clone(),
                 &hir.spans[hir_func.spans.get(&e.target()).copied().unwrap_or(0)],
             )
         })
         .unzip();
 
     let ctx = AnalyzeContext {
-        hir,
         span,
         input_spans: &input_spans,
+        hir,
     };
 
     match hir_node {
@@ -141,35 +157,36 @@ fn analyze_node(
             // Input node is expected to already exist by this point; do nothing
         }
         hir::Node::Output => {
-            let node_idx = mir_graph.add_node(mir::Node::Output);
-            graph_map.insert(hir_node_idx, node_idx);
+            let node_idx = tctx.mir_graph.add_node(mir::Node::Output);
+            tctx.graph_map.insert(hir_node_idx, node_idx);
         }
         hir::Node::Constant(value) => {
-            let value_info = mir::ValueInfo::try_from(value).map_err(|err| {
-                Error::FancyError(FancyError {
-                    files: hir.files.clone(),
-                    span: hir.spans[hir_func.spans.get(&hir_node_idx).copied().unwrap_or(0)]
-                        .clone(),
-                    input_spans: Vec::new(),
-                    kind: ErrorKind::UiuaValue(err),
-                })
-            })?;
-            let node_idx = mir_graph.add_node(mir::Node::Constant(value_info.clone()));
-            graph_map.insert(hir_node_idx, node_idx);
-            info_map.insert(node_idx, [value_info].into());
+            let value_info = match mir::ValueInfo::try_from(value) {
+                Ok(v) => v,
+                Err(err) => ctx.error(ErrorKind::UiuaValue(err))?,
+            };
+            let node_idx = tctx
+                .mir_graph
+                .add_node(mir::Node::Constant(value_info.clone()));
+            tctx.graph_map.insert(hir_node_idx, node_idx);
+            tctx.info_map.insert(node_idx, [value_info].into());
         }
         hir::Node::FuncPrim(prim) if let Some(impl_fn) = impls::monadic_prim(*prim) => {
-            let node_idx = mir_graph.add_node(mir::Node::FuncPrim(prim.into()));
-            graph_map.insert(hir_node_idx, node_idx);
-            info_map.insert(node_idx, [impl_fn(input_infos[0], ctx)?].into());
+            let node_idx = tctx.mir_graph.add_node(mir::Node::FuncPrim(prim.into()));
+            tctx.graph_map.insert(hir_node_idx, node_idx);
+            tctx.info_map
+                .insert(node_idx, [impl_fn(&input_infos[0], ctx)?].into());
         }
+        // hir::Node::FuncPrim(prim) if let Some(impl_fn) = impls::dyadic_prim(*prim) => {
+        //     let node_idx = mir_graph.add_node(mir::Node::FuncPrim(prim.into()));
+        //     graph_map.insert(hir_node_idx, node_idx);
+        //     info_map.insert(
+        //         node_idx,
+        //         [impl_fn(input_infos[0], input_infos[1], ctx)?].into(),
+        //     );
+        // }
         hir::Node::FuncPrim(prim) if let Some(impl_fn) = impls::dyadic_prim(*prim) => {
-            let node_idx = mir_graph.add_node(mir::Node::FuncPrim(prim.into()));
-            graph_map.insert(hir_node_idx, node_idx);
-            info_map.insert(
-                node_idx,
-                [impl_fn(input_infos[0], input_infos[1], ctx)?].into(),
-            );
+            impl_fn(&input_infos[0], &input_infos[1], ctx, tctx)?;
         }
         // hir::Node::FuncPrim(primitive) => todo!(),
         // hir::Node::FuncImplPrim(impl_primitive) => todo!(),

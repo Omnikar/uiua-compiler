@@ -3178,6 +3178,7 @@ dependencies = [
  "inkwell",
  "itertools",
  "petgraph",
+ "rand",
  "regex",
  "ron",
  "serde",

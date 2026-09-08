@@ -1,5 +1,6 @@
 pub mod polynomial;
 
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -64,12 +65,18 @@ impl From<&crate::hir::Prim> for Prim {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize)]
+pub enum MirOp {
+    CastInt(types::ScalarInfo),
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub enum Node {
     Input,
     Output,
     Constant(ValueInfo),
     FuncPrim(Prim),
+    MirOp(MirOp),
     ModPrim(Prim, Vec<Function>),
     // Call(…),
     // ...
@@ -100,6 +107,35 @@ pub enum ValueInfo {
 }
 
 impl ValueInfo {
+    pub fn type_name(&self) -> Rc<str> {
+        match self {
+            ValueInfo::Scalar(scalar) => scalar.type_name().into(),
+            ValueInfo::Array(array_info) => {
+                let shape_s = match &**array_info {
+                    types::ArrayInfo::Known { value, .. } => {
+                        let s = value.shape.iter().map(ToString::to_string).join("×");
+                        // let s = value.shape.iter().map(ToString::to_string).join(" ");
+                        format!("shape {s} ")
+                    }
+                    types::ArrayInfo::Ranked { shape, .. } => {
+                        let s = shape
+                            .iter()
+                            .map(|ax| ax.as_const().map_or_else(|| "?".into(), |x| x.to_string()))
+                            .join("×");
+                        // .join(" ");
+                        format!("shape {s} ")
+                    }
+                    types::ArrayInfo::Unranked { .. } => String::new(),
+                };
+                let scalar_type_s = array_info.scalar_type().type_name();
+                format!("{shape_s}array of {scalar_type_s}").into()
+            }
+            ValueInfo::Map(_) => "map".into(),
+            ValueInfo::Struct(_) => todo!(),
+            ValueInfo::Enum(_) => todo!(),
+        }
+    }
+
     pub fn supertype(&self, rhs: &Self) -> Option<Self> {
         macro_rules! scalar_supertype_ident {
             ($lhs:expr, $rhs:expr; $($variant:path),+) => {
@@ -203,6 +239,14 @@ pub mod types {
     }
 
     impl ArrayInfo {
+        pub fn scalar_type(&self) -> &ValueInfo {
+            match self {
+                ArrayInfo::Known { scalar_type, .. }
+                | ArrayInfo::Ranked { scalar_type, .. }
+                | ArrayInfo::Unranked { scalar_type, .. } => scalar_type,
+            }
+        }
+
         #[allow(
             clippy::too_many_lines,
             reason = "This function is one big `match` expression that it doesn't seem can be split up very ergonomically."

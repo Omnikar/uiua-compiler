@@ -17,6 +17,7 @@ thiserror = "2"
 bidimap = "0.7.0"
 itertools = "0.15.0"
 petgraph = "0.8.3"
+rand = "0.10.2"
 
 # Serialization
 regex = "1"
