@@ -89,18 +89,18 @@ mod tests {
         let func1_s = "
             ((), [
                 ([0, 1], Input, [], (), 0),
-                ([2], FuncPrim(ADD), [0, 1], (), 0),
-                ([3], FuncPrim(MUL), [0, 1], (), 0),
-                ([4], FuncPrim(SUB), [2, 3], (), 0),
+                ([2], FuncPrim(Prim(ADD)), [0, 1], (), 0),
+                ([3], FuncPrim(Prim(MUL)), [0, 1], (), 0),
+                ([4], FuncPrim(Prim(SUB)), [2, 3], (), 0),
                 ([], Output, [4], (), 0),
             ])
         ";
         let func2_s = "
             ((), [
                 ([0, 1], Input, [], (), 0),
-                ([2], FuncPrim(MUL), [0, 1], (), 0),
-                ([3], FuncPrim(ADD), [0, 1], (), 0),
-                ([4], FuncPrim(SUB), [3, 2], (), 0),
+                ([2], FuncPrim(Prim(MUL)), [0, 1], (), 0),
+                ([3], FuncPrim(Prim(ADD)), [0, 1], (), 0),
+                ([4], FuncPrim(Prim(SUB)), [3, 2], (), 0),
                 ([], Output, [4], (), 0),
             ])
         ";
