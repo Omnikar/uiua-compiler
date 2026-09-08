@@ -56,14 +56,14 @@ fn float_func(
     input_info: &ValueInfo,
     ctx: AnalyzeContext,
     func: fn(f64) -> f64,
-    error: ErrorKind,
+    error: impl Fn() -> ErrorKind,
 ) -> SingleAnalyzeResult {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
             S::Bool(b) => S::Float(b.map(|b| func(f64::from(b)))),
             S::Int(i) => S::Float(i.map(|i| func(i as f64))),
             S::Float(f) => S::Float(f.map(func)),
-            S::Char(_) => ctx.error(error)?,
+            S::Char(_) => ctx.error(error())?,
         })
     })
 }
@@ -175,7 +175,7 @@ macro_rules! float_funcs {
                     input_info,
                     ctx,
                     $func,
-                    ErrorKind::ExpectedNumber($name_str),
+                    || ErrorKind::ExpectedNumber($name_str),
                 )
             }
         )*

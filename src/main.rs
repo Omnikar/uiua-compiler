@@ -2,7 +2,8 @@
 #![allow(
     clippy::items_after_statements,
     clippy::match_wildcard_for_single_variants,
-    clippy::zero_sized_map_values
+    clippy::zero_sized_map_values,
+    clippy::needless_pass_by_value
 )]
 
 mod generic_ir;
