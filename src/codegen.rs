@@ -1,11 +1,13 @@
-use std::path::Path;
-
 use clap::{Args, ValueEnum};
+
 use inkwell::context::Context;
+use inkwell::passes::PassBuilderOptions;
 use inkwell::targets::{
     CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine, TargetTriple,
 };
 use inkwell::{AddressSpace, OptimizationLevel};
+
+use std::path::Path;
 
 mod add_strict;
 use add_strict::build_array_add_strict;
@@ -143,6 +145,10 @@ pub(crate) fn codegen(
 
     module.set_triple(&triple);
     module.set_data_layout(&target_data.get_data_layout());
+
+    module
+        .run_passes("default<O3>", &target_machine, PassBuilderOptions::create())
+        .map_err(|e| e.to_string())?;
 
     if emit_object {
         let out_file = output_path.unwrap_or_else(|| Path::new("a.o"));
