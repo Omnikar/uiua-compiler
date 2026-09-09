@@ -12,7 +12,7 @@ use super::heap_array::{
 /// Emits a loop `for i in 0..count { result[i] =  a[a_i] + b[b_i] }`, which should
 /// let us reuse this for pervasive/broadcasting array add. Perhaps this could have
 /// been planned out better; I ended up factoring out this part of the code because
-/// the add functios were getting too large. This function takes a ton of arguments
+/// the add functions were getting too large. The function takes a ton of arguments
 /// but I think it's at a clean separation point, because it should be reusable for
 /// pervasives. We might want to make it work across more instructions since we can
 /// also apply this to subtraction etc.
