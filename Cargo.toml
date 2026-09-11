@@ -27,5 +27,7 @@ serde = "1"
 inkwell = { version = "0.10.0", features = ["llvm22-1"] }
 uiua = { git = "https://github.com/Omnikar/uiua", branch = "ron-compatible" }
 
+libffi-sys = { version = "3.3.3", features = ["system"] }
+
 [profile.release]
 opt-level = "s"
