@@ -3177,6 +3177,7 @@ dependencies = [
  "clap",
  "inkwell",
  "itertools",
+ "libffi-sys",
  "petgraph",
  "regex",
  "ron",
