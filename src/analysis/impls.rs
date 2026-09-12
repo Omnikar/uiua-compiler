@@ -1,8 +1,8 @@
 mod pervasive_monadic;
 mod pervasive_dyadic;
 
-use super::{AnalyzeContext, Error, ErrorKind, ValueInfo, types};
-use crate::hir;
+use super::{AnalyzeContext, Error, ErrorKind, FunctionTranslation, ValueInfo, types};
+use crate::{hir, mir};
 
 type SingleAnalyzeResult = Result<ValueInfo, Error>;
 
@@ -46,18 +46,20 @@ pub fn monadic_prim(prim: hir::Prim) -> Option<MonadicImplFn> {
     })
 }
 
-pub type DyadicImplFn = fn(&ValueInfo, &ValueInfo, AnalyzeContext) -> SingleAnalyzeResult;
-pub fn dyadic_prim(prim: hir::Prim) -> Option<DyadicImplFn> {
-    use pervasive_dyadic as pd;
-    use uiua::ImplPrimitive as Ip;
-    use uiua::Primitive as Pr;
-    Some(match prim {
-        hir::Prim::Prim(prim) => match prim {
-            Pr::Eq => pd::equals,
-            _ => return None,
-        },
-        hir::Prim::Impl(impl_prim) => match impl_prim {
-            _ => return None,
-        },
-    })
-}
+// pub type DyadicImplFn = fn(&ValueInfo, &ValueInfo, AnalyzeContext) -> SingleAnalyzeResult;
+// pub type DyadicImplFn =
+//     fn(&ValueInfo, &ValueInfo, AnalyzeContext, &mut TranslationContext) -> Result<(), Error>;
+// pub fn dyadic_prim(prim: hir::Prim) -> Option<DyadicImplFn> {
+//     use pervasive_dyadic as pd;
+//     use uiua::ImplPrimitive as Ip;
+//     use uiua::Primitive as Pr;
+//     Some(match prim {
+//         hir::Prim::Prim(prim) => match prim {
+//             Pr::Eq => pd::equals,
+//             _ => return None,
+//         },
+//         hir::Prim::Impl(impl_prim) => match impl_prim {
+//             _ => return None,
+//         },
+//     })
+// }
