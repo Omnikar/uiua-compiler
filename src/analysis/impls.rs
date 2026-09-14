@@ -2,7 +2,7 @@ mod pervasive_monadic;
 mod pervasive_dyadic;
 
 use super::{AnalyzeContext, Error, ErrorKind, FunctionTranslation, TirValue, ValueInfo, types};
-use crate::{uir, tir};
+use crate::{uir, tir};FunctionTranslator
 
 use uiua::{ImplPrimitive as Ip, Primitive as Pr};
 
@@ -61,7 +61,7 @@ pub fn dyadic_prim(prim: uir::Prim) -> Option<DyadicImplFn> {
             // subtract
             // multiply
             Pr::Div => pd::divide,
-            // modulo
+            // moduloFunctionTranslator
             // power
             // minimum
             // maximum

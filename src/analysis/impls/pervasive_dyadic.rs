@@ -3,7 +3,7 @@
 use itertools::Itertools;
 
 use super::{
-    AnalyzeContext, Error, ErrorKind, FunctionTranslation, TirValue, ValueInfo, tir, types,
+    AnalyzeContext, Error, ErrorKind, FunctionTranslator, TirValue, ValueInfo, tir, types,
 };
 use types::ScalarInfo as S;
 
@@ -56,7 +56,7 @@ fn try_match_types<'a>(
     func_name: &'static str,
     (lhs, lhs_info): (&mut TirValue, &mut &'a ValueInfo),
     (rhs, rhs_info): (&mut TirValue, &mut &'a ValueInfo),
-    tr: &'a FunctionTranslation,
+    tr: &'a FunctionTranslator,
     ctx: AnalyzeContext,
 ) -> Result<(), Error> {
     use ValueInfo as V;
@@ -301,7 +301,7 @@ fn try_match_shapes<'a>(
     func_name: &'static str,
     (lhs, lhs_info): (&mut TirValue, &mut &'a ValueInfo),
     (rhs, rhs_info): (&mut TirValue, &mut &'a ValueInfo),
-    tr: &'a FunctionTranslation,
+    tr: &'a FunctionTranslator,
     ctx: AnalyzeContext,
 ) -> Result<(), Error> {
     for check in try_match_shapes_rec(func_name, lhs_info, rhs_info, ctx)? {
@@ -450,7 +450,7 @@ fn pervasive_dyadic(
     prim: tir::Prim,
     mut lhs: TirValue,
     mut rhs: TirValue,
-    tr: &FunctionTranslation,
+    tr: &FunctionTranslator,
     ctx: AnalyzeContext,
     scalar_func: impl Fn(types::ScalarInfo, types::ScalarInfo) -> Result<types::ScalarInfo, Error>
     + Clone,

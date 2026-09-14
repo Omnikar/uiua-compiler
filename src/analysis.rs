@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::generic_ir::{FunctionNode, Graph, NodeIndex};
-use crate::uir::{self, Uir};
 use crate::tir::{self, Tir, ValueInfo, types};
+use crate::uir::{self, Uir};
 use error::{ErrorKind, FancyError};
 
 #[derive(thiserror::Error, Debug)]
@@ -32,18 +32,19 @@ struct TirValue {
     out_i: usize,
 }
 
+/// Responsible for managing the translation of UIR to TIR
 #[derive(Clone)]
-struct FunctionTranslation<'uir, 'tir> {
-    uir: &'uir Uir,
-    uir_func: &'uir uir::Function,
-    tir: &'tir RefCell<Tir>,
+struct FunctionTranslator<'ctx> {
+    uir: &'ctx Uir,
+    uir_func: &'ctx uir::Function,
+    tir: &'ctx RefCell<Tir>,
     tir_graph: RefCell<Graph<tir::Node>>,
     value_map: RefCell<HashMap<UirValue, TirValue>>,
     info_map: FrozenMap<NodeIndex, tir::NodeMeta>,
     span_map: RefCell<HashMap<NodeIndex, usize>>,
 }
 
-impl FunctionTranslation<'_, '_> {
+impl FunctionTranslator<'_> {
     fn add_node<const N: usize>(
         &self,
         node: tir::Node,
@@ -83,7 +84,7 @@ impl FunctionTranslation<'_, '_> {
 struct AnalyzeContext<'ctx> {
     span: &'ctx uiua::Span,
     input_spans: &'ctx [&'ctx uiua::Span],
-    tr: &'ctx FunctionTranslation<'ctx, 'ctx>,
+    tr: &'ctx FunctionTranslator<'ctx>,
 }
 
 impl AnalyzeContext<'_> {
@@ -144,7 +145,7 @@ fn monomorphize_and_analyze(
     let info_map = FrozenMap::new();
     info_map.insert(input_idx, inputs.clone());
 
-    let translation = FunctionTranslation {
+    let translation = FunctionTranslator {
         uir,
         uir_func,
         tir,
@@ -181,7 +182,7 @@ fn monomorphize_and_analyze(
     })
 }
 
-fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslation) -> Result<(), Error> {
+fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<(), Error> {
     let uir_node = &tr.uir_func.graph[uir_node_idx];
     let span = &tr.uir.spans[tr.uir_func.spans.get(&uir_node_idx).copied().unwrap_or(0)];
 
