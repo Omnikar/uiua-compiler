@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-// TODO: Name this
+// Untyped IR, generated directly from Uasm
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Uir {
     pub structs: Vec<Struct>,

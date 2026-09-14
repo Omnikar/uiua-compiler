@@ -9,6 +9,7 @@ use std::rc::Rc;
 
 use polynomial::Expr;
 
+/// Typed IR, created via static analysis of UIR
 #[derive(Debug, Clone, Serialize)]
 pub struct Tir {
     pub structs: Vec<Struct>,
