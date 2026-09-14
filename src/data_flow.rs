@@ -374,25 +374,25 @@ fn get_module_item_index(
     module.names.get_only(name, pref, uasm).map(|li| li.index)
 }
 
-/// Look up and process a box array of char arrays as strings
+/// Look up and process a box array of char arrays as a vec of strings
 /// The array is looked up within a given module by name
-fn iter_string_array_member(
+fn get_string_array_member(
     name: &str,
     module: &uiua::Module,
     uasm: &uiua::Assembly,
-) -> Option<impl Iterator<Item = String>> {
+) -> Option<Vec<String>> {
     if let Some(const_index) =
         get_module_item_index(name, module, uiua::LookupPreference::Function, uasm)
         && let uiua::BindingKind::Const(Some(uiua::Value::Box(char_arrays))) =
             &uasm.bindings[const_index].kind
     {
-        Some(char_arrays.elements().filter_map(|v| {
-            if let uiua::Value::Char(string_arr) = v.as_ref() {
-                Some(string_arr.elements().collect())
-            } else {
-                None
-            }
-        }))
+        char_arrays
+            .elements()
+            .map(|v| match v.as_ref() {
+                uiua::Value::Char(string_arr) => Some(string_arr.elements().collect()),
+                _ => None,
+            })
+            .collect()
     } else {
         None
     }
@@ -407,7 +407,7 @@ fn struct_from_module(
     let mut ignored_bindings: HashSet<usize> = HashSet::new();
 
     use uiua::LookupPreference::Function as FnLookup;
-    if let Some(fields) = iter_string_array_member("Fields", module, uasm)
+    if let Some(fields) = get_string_array_member("Fields", module, uasm)
         && let Some(type_const_index) = get_module_item_index("t", module, FnLookup, uasm)
         // Extract box array from binding
         && let uiua::BindingKind::Const(Some(uiua::Value::Box(type_array))) =
@@ -422,10 +422,8 @@ fn struct_from_module(
             name: name.into(),
             fields: Vec::new(),
         };
-        for (field, elem_type) in fields.zip(type_array.elements()) {
-            if let Some(field_fn_index) = get_module_item_index(&field, module, FnLookup, uasm) {
-                ignored_bindings.insert(field_fn_index);
-            }
+        for (field, elem_type) in fields.into_iter().zip(type_array.elements()) {
+            ignored_bindings.insert(get_module_item_index(&field, module, FnLookup, uasm).unwrap());
             struct_def
                 .fields
                 .push((field, uiua::Type::from_spec(elem_type.as_ref()).unwrap()));
@@ -443,22 +441,26 @@ fn enum_from_module(
 ) -> Option<(Enum, HashSet<usize>)> {
     let mut ignored_bindings: HashSet<usize> = HashSet::new();
 
-    if let Some(variants) = iter_string_array_member("Variants", module, uasm) {
+    if let Some(variants) = get_string_array_member("Variants", module, uasm) {
         let mut enum_def = Enum {
             name: name.into(),
             variants: Vec::new(),
         };
         for variant in variants {
-            if let Some(variant_mod_index) =
-                get_module_item_index(&variant, module, uiua::LookupPreference::Module, uasm)
-                && let uiua::BindingKind::Module(variant_module) =
-                    &uasm.bindings[variant_mod_index].kind
-                && let Some((struct_def, ignored)) =
-                    struct_from_module(&variant, variant_module, uasm)
-            {
-                ignored_bindings.extend(ignored);
-                enum_def.variants.push(struct_def);
-            }
+            let uiua::BindingKind::Module(variant_module) = &uasm.bindings[get_module_item_index(
+                &variant,
+                module,
+                uiua::LookupPreference::Module,
+                uasm,
+            )
+            .unwrap()]
+            .kind
+            else {
+                panic!("{name} has a member matching a variant name that is not a module")
+            };
+            let (struct_def, ignored) = struct_from_module(&variant, variant_module, uasm).unwrap();
+            ignored_bindings.extend(ignored);
+            enum_def.variants.push(struct_def);
         }
         Some((enum_def, ignored_bindings))
     } else {
