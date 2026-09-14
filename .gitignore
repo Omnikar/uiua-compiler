@@ -1,1 +1,11 @@
 /target
+.cargo/config.toml
+
+
+# Uiua compile artifacts
+*.o
+*.ll
+*.uasm
+
+
+

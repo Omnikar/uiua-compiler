@@ -13,6 +13,8 @@ mod mir;
 mod data_flow;
 /// Static analysis of type, rank, and shape
 mod analysis;
+/// Final lowering to LLVM IR via Inkwell
+mod codegen;
 
 use clap::Parser;
 use std::io::{Read, Write};
@@ -22,13 +24,15 @@ use std::path::PathBuf;
 #[command(about = "Uiua native compiler")]
 struct Args {
     #[arg(help = "Input file path, - for stdin")]
-    filepath: String,
+    filepath: Option<PathBuf>,
     #[arg(short, help = "Output file path")]
     output: Option<String>,
     // TODO: Eventually change the default to executable
     // TODO: Infer based on output filename extension when not provided
     #[arg(long, value_enum, default_value_t = EmitFormat::Hir)]
     emit: EmitFormat,
+    #[command(flatten)]
+    target: codegen::TargetArgs,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,6 +44,7 @@ enum EmitFormat {
     Hir,
     Mir,
     LlvmIr,
+    Object,
     Executable,
 }
 impl std::fmt::Display for EmitFormat {
@@ -185,19 +190,33 @@ impl LoweringState {
 fn run() -> Result<(), ProgramError> {
     let args = Args::try_parse()?;
 
-    let path = PathBuf::from(&args.filepath);
-    let mut state = match path.extension() {
-        Some(ext) if ext == "ua" => LoweringState::Ua(path.clone()),
-        Some(ext) if ext == "uasm" => {
+    if matches!(
+        args.emit,
+        EmitFormat::LlvmIr | EmitFormat::Object | EmitFormat::Executable
+    ) || args.filepath.is_none()
+    {
+        let is_obj = matches!(args.emit, EmitFormat::Object | EmitFormat::Executable);
+        return codegen::codegen(
+            &args.target,
+            is_obj,
+            args.output.as_deref().map(std::path::Path::new),
+        )
+        .map_err(ProgramError::Other);
+    }
+
+    let path = args.filepath.unwrap();
+    let mut state = match path.extension().and_then(|ext| ext.to_str()) {
+        Some("ua") => LoweringState::Ua(path.clone()),
+        Some("uasm") => {
             let uasm_text = std::fs::read_to_string(&path)?;
             LoweringState::Uasm(Box::new(uiua::Assembly::from_uasm(&uasm_text)?))
         }
-        Some(ext) if ext == "hir" => {
+        Some("hir") => {
             let hir_text = std::fs::read_to_string(&path)?;
             let hir: hir::Hir = ron::from_str(&hir_text)?;
             LoweringState::Hir(Box::new(hir))
         }
-        None if args.filepath == "-" => {
+        None if path.as_os_str() == "-" => {
             let mut ua_text = String::new();
             std::io::stdin().read_to_string(&mut ua_text)?;
             LoweringState::UaStr(ua_text)
