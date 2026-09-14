@@ -57,8 +57,8 @@ enum ProgramError {
     #[error("{0}")]
     ClapError(#[from] clap::Error),
 
-    #[error("Unknown file type")]
-    WrongFileType,
+    #[error("Unknown file type{}", .0.as_ref().map_or_else(String::new, |x| format!(": {x}")))]
+    UnknownFileType(Option<String>),
 
     #[error("Cannot convert from {0} to {1}")]
     InvalidConversion(EmitFormat, EmitFormat),
@@ -202,7 +202,11 @@ fn run() -> Result<(), ProgramError> {
             std::io::stdin().read_to_string(&mut ua_text)?;
             LoweringState::UaStr(ua_text)
         }
-        _ => return Err(ProgramError::WrongFileType),
+        ext => {
+            return Err(ProgramError::UnknownFileType(
+                ext.map(|x| x.to_string_lossy().into_owned()),
+            ));
+        }
     };
 
     state = state.convert_to(args.emit)?;
