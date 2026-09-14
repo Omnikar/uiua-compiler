@@ -1,6 +1,6 @@
 #![allow(clippy::cast_precision_loss, clippy::float_cmp)]
 
-use itertools::{Either, Itertools};
+use itertools::Itertools;
 
 use super::{
     AnalyzeContext, Error, ErrorKind, FunctionTranslation, MirValue, ValueInfo, mir, types,
@@ -187,13 +187,16 @@ impl ValueInfo {
     }
 }
 
-type ShapeCheckList = Vec<Either<mir::MirOp, (Side, mir::MirOp)>>;
+enum ShapeCheck {
+    Both(mir::MirOp),
+    One(Side, mir::MirOp),
+}
 fn try_match_shapes_rec(
     func_name: &'static str,
     lhs_info: &ValueInfo,
     rhs_info: &ValueInfo,
     ctx: AnalyzeContext,
-) -> Result<ShapeCheckList, Error> {
+) -> Result<Vec<ShapeCheck>, Error> {
     use ValueInfo as V;
     match (lhs_info, rhs_info) {
         (V::Scalar(_), _) | (_, V::Scalar(_)) => Ok(Vec::new()),
@@ -219,27 +222,27 @@ fn try_match_shapes_rec(
                         ))?;
                     }
                 } else if let Some(l_const) = l_ax.as_const() {
-                    checks.push(Either::Right((
+                    checks.push(ShapeCheck::One(
                         Side::Right,
                         mir::MirOp::CheckAxis {
                             depth: 0,
                             ax_i,
                             length: l_const.cast_unsigned(),
                         },
-                    )));
+                    ));
                 } else if let Some(r_const) = r_ax.as_const() {
-                    checks.push(Either::Right((
+                    checks.push(ShapeCheck::One(
                         Side::Left,
                         mir::MirOp::CheckAxis {
                             depth: 0,
                             ax_i,
                             length: r_const.cast_unsigned(),
                         },
-                    )));
+                    ));
                 } else if let Some(0) = (l_ax.clone() - r_ax.clone()).as_const() {
                     // These unknown axes are known equal, no check needed
                 } else {
-                    checks.push(Either::Left(mir::MirOp::CheckAxes {
+                    checks.push(ShapeCheck::Both(mir::MirOp::CheckAxes {
                         lhs_depth: 0,
                         lhs_ax_i: ax_i,
                         rhs_depth: 0,
@@ -255,32 +258,32 @@ fn try_match_shapes_rec(
                 ctx,
             )? {
                 checks.push(match check {
-                    Either::Left(mir::MirOp::CheckAxes {
+                    ShapeCheck::Both(mir::MirOp::CheckAxes {
                         lhs_depth,
                         lhs_ax_i,
                         rhs_depth,
                         rhs_ax_i,
-                    }) => Either::Left(mir::MirOp::CheckAxes {
+                    }) => ShapeCheck::Both(mir::MirOp::CheckAxes {
                         lhs_depth: lhs_depth + 1,
                         lhs_ax_i,
                         rhs_depth: rhs_depth + 1,
                         rhs_ax_i,
                     }),
-                    Either::Right((
+                    ShapeCheck::One(
                         side,
                         mir::MirOp::CheckAxis {
                             depth,
                             ax_i,
                             length,
                         },
-                    )) => Either::Right((
+                    ) => ShapeCheck::One(
                         side,
                         mir::MirOp::CheckAxis {
                             depth: depth + 1,
                             ax_i,
                             length,
                         },
-                    )),
+                    ),
                     _ => unreachable!(),
                 });
             }
@@ -303,14 +306,14 @@ fn try_match_shapes<'a>(
 ) -> Result<(), Error> {
     for check in try_match_shapes_rec(func_name, lhs_info, rhs_info, ctx)? {
         match check {
-            Either::Left(op) => {
+            ShapeCheck::Both(op) => {
                 [(*lhs, *lhs_info), (*rhs, *rhs_info)] = tr.add_node(
                     op.into(),
                     [lhs_info.clone(), rhs_info.clone()],
                     [*lhs, *rhs],
                 );
             }
-            Either::Right((side, op)) => {
+            ShapeCheck::One(side, op) => {
                 let (val, val_info) =
                     side.select((&mut *lhs, &mut *lhs_info), (&mut *rhs, &mut *rhs_info));
                 [(*val, *val_info)] = tr.add_node(op.into(), [val_info.clone()], [*val]);
