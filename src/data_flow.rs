@@ -2,7 +2,7 @@ use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 
 use crate::generic_ir::{Graph, NodeIndex};
-use crate::hir::{Binding, Enum, Function, Hir, Node, Prim, Struct};
+use crate::hir::{Binding, Enum, Function, Hir, Node, Struct};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {

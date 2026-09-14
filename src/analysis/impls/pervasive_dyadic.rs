@@ -1,4 +1,4 @@
-#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_precision_loss, clippy::float_cmp)]
 
 use itertools::{Either, Itertools};
 
@@ -475,32 +475,134 @@ fn pervasive_dyadic(
     Ok(output)
 }
 
-pub fn equals(
-    lhs: MirValue,
-    rhs: MirValue,
-    tr: &FunctionTranslation,
-    ctx: AnalyzeContext,
-) -> Result<MirValue, Error> {
-    pervasive_dyadic(
-        "equals",
-        uiua::Primitive::Eq.into(),
-        lhs,
-        rhs,
-        tr,
-        ctx,
-        |l, r| {
-            Ok(match (l, r) {
-                (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
-                (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
-                #[allow(clippy::float_cmp)]
-                (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
-                (S::Char(l), S::Char(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
-                _ => ctx.error(ErrorKind::IncompatibleTypes(
-                    "equals",
-                    l.type_name().into(),
-                    r.type_name().into(),
-                ))?,
-            })
-        },
-    )
+macro_rules! matching_type_func {
+    (
+        $name:ident, $name_str:literal, $prim:path;
+        $(
+            $pattern:pat => $output:expr,
+        )*
+    ) => {
+        pub fn $name(
+            lhs: MirValue,
+            rhs: MirValue,
+            tr: &FunctionTranslation,
+            ctx: AnalyzeContext,
+        ) -> Result<MirValue, Error> {
+            pervasive_dyadic(
+                $name_str,
+                $prim.into(),
+                lhs,
+                rhs,
+                tr,
+                ctx,
+                |l, r| {
+                    Ok(match (l, r) {
+                        $(
+                            $pattern => $output,
+                        )*
+                        _ => ctx.error(ErrorKind::IncompatibleTypes(
+                            $name_str,
+                            l.type_name().into(),
+                            r.type_name().into(),
+                        ))?,
+                    })
+                }
+            )
+        }
+    };
+}
+
+matching_type_func! {
+    equals, "equals", Pr::Eq;
+    (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
+    (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
+    (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
+    (S::Char(l), S::Char(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
+}
+
+matching_type_func! {
+    not_equals, "not equals", Pr::Ne;
+    (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| l != r)),
+    (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l != r)),
+    (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l != r)),
+    (S::Char(l), S::Char(r)) => S::Bool(l.zip(r).map(|(l, r)| l != r)),
+}
+
+matching_type_func! {
+    less_than, "less than", Pr::Lt;
+    (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| l && !r)),
+    (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l > r)),
+    (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l > r)),
+    (S::Char(l), S::Char(r)) => S::Bool(l.zip(r).map(|(l, r)| l > r)),
+}
+
+matching_type_func! {
+    less_or_equal, "less or equal", Pr::Le;
+    (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| l || !r)),
+    (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l >= r)),
+    (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l >= r)),
+    (S::Char(l), S::Char(r)) => S::Bool(l.zip(r).map(|(l, r)| l >= r)),
+}
+
+matching_type_func! {
+    greater_than, "greater than", Pr::Gt;
+    (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| !l && r)),
+    (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l < r)),
+    (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l < r)),
+    (S::Char(l), S::Char(r)) => S::Bool(l.zip(r).map(|(l, r)| l < r)),
+}
+
+matching_type_func! {
+    greater_or_equal, "greater or equal", Pr::Ge;
+    (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| !l || r)),
+    (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l <= r)),
+    (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l <= r)),
+    (S::Char(l), S::Char(r)) => S::Bool(l.zip(r).map(|(l, r)| l <= r)),
+}
+
+macro_rules! float_funcs {
+    ($($name:ident, $name_str:literal, $prim:path, $func:expr;)*) => {
+        $(
+            pub fn $name(
+                lhs: MirValue,
+                rhs: MirValue,
+                tr: &FunctionTranslation,
+                ctx: AnalyzeContext,
+            ) -> Result<MirValue, Error> {
+                let func: fn(f64, f64) -> f64 = $func;
+                pervasive_dyadic(
+                    $name_str,
+                    $prim.into(),
+                    lhs,
+                    rhs,
+                    tr,
+                    ctx,
+                    |l, r| {
+                        let l = match try_match_scalar_types(l, S::Float(None)) {
+                            ScalarTypeMatch::Identical => l,
+                            ScalarTypeMatch::Matching(Side::Left, _, to) => to,
+                            _ => ctx.error(ErrorKind::ExpectedNumber($name_str, l.type_name().into()))?,
+                        };
+                        let r = match try_match_scalar_types(r, S::Float(None)) {
+                            ScalarTypeMatch::Identical => r,
+                            ScalarTypeMatch::Matching(Side::Left, _, to) => to,
+                            _ => ctx.error(ErrorKind::ExpectedNumber($name_str, r.type_name().into()))?,
+                        };
+                        let (S::Float(l), S::Float(r)) = (l, r) else {
+                            unreachable!()
+                        };
+                        Ok(S::Float(l.zip(r).map(|(l, r)| func(l, r))))
+                    },
+                )
+            }
+        )*
+    };
+}
+
+use uiua::{ImplPrimitive as Ip, Primitive as Pr};
+float_funcs! {
+    divide, "divide", Pr::Div, |l, r| r / l;
+    atangent, "atangent", Pr::Atan, |l, r| l.atan2(r);
+
+    root, "root", Ip::Root, |l, r| r.powf(l.recip());
 }
