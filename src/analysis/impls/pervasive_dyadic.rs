@@ -322,7 +322,7 @@ fn try_match_shapes<'a>(
 
 /// Must only be invoked after calling `try_match_shapes`
 #[allow(clippy::too_many_lines)]
-pub fn pervasive_dyadic_rec(
+fn pervasive_dyadic_rec(
     lhs_info: &ValueInfo,
     rhs_info: &ValueInfo,
     scalar_func: impl Fn(types::ScalarInfo, types::ScalarInfo) -> Result<types::ScalarInfo, Error>
