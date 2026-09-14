@@ -1,5 +1,6 @@
 pub mod polynomial;
 
+use derive_more::From;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -46,7 +47,7 @@ pub struct Enum {
     pub info: types::EnumInfo,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, From, Serialize, Deserialize)]
 pub enum Prim {
     Prim(uiua::Primitive),
     Impl(uiua::ImplPrimitive),
@@ -86,7 +87,7 @@ pub enum MirOp {
     },
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, From)]
 pub enum Node {
     Input,
     Output,

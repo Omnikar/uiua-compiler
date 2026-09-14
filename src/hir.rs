@@ -1,3 +1,4 @@
+use derive_more::From;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -42,13 +43,13 @@ pub struct Enum {
     pub variants: Vec<Struct>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, From, Serialize, Deserialize)]
 pub enum Prim {
     Prim(uiua::Primitive),
     Impl(uiua::ImplPrimitive),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, From, Serialize, Deserialize)]
 pub enum Node {
     Input,
     Output,

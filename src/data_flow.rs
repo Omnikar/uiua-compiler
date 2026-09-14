@@ -301,13 +301,13 @@ fn process_node(uiua_node: &uiua::Node, func_graph: &mut WorkingFuncGraph) -> Re
         // ---
         _ if let Some((node, span)) = {
             match uiua_node {
-                UNode::Prim(prim, span) => Some((Node::FuncPrim(Prim::Prim(*prim)), span)),
+                UNode::Prim(prim, span) => Some((Node::FuncPrim((*prim).into()), span)),
                 UNode::ImplPrim(impl_prim, span) => {
-                    Some((Node::FuncPrim(Prim::Impl(*impl_prim)), span))
+                    Some((Node::FuncPrim((*impl_prim).into()), span))
                 }
                 UNode::Mod(prim, funcs, span) => Some((
                     Node::ModPrim(
-                        Prim::Prim(*prim),
+                        (*prim).into(),
                         funcs
                             .iter()
                             .map(|sig_node| simulate_data_flow(&sig_node.node))
@@ -317,7 +317,7 @@ fn process_node(uiua_node: &uiua::Node, func_graph: &mut WorkingFuncGraph) -> Re
                 )),
                 UNode::ImplMod(impl_prim, funcs, span) => Some((
                     Node::ModPrim(
-                        Prim::Impl(*impl_prim),
+                        (*impl_prim).into(),
                         funcs
                             .iter()
                             .map(|sig_node| simulate_data_flow(&sig_node.node))

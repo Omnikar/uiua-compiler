@@ -66,7 +66,7 @@ fn try_match_types<'a>(
             ScalarTypeMatch::Matching(side, from, to) => {
                 let (val, val_info) = side.select((lhs, lhs_info), (rhs, rhs_info));
                 [(*val, *val_info)] = tr.add_node(
-                    mir::Node::MirOp(mir::MirOp::CastNum { from, to }),
+                    mir::MirOp::CastNum { from, to }.into(),
                     [V::Scalar(to)],
                     [*val],
                 );
@@ -90,7 +90,7 @@ fn try_match_types<'a>(
                 ScalarTypeMatch::Matching(side, from, to) => match side {
                     Side::Left => {
                         [(*lhs, *lhs_info)] = tr.add_node(
-                            mir::Node::MirOp(mir::MirOp::CastNum { from, to }),
+                            mir::MirOp::CastNum { from, to }.into(),
                             [V::Scalar(to)],
                             [*lhs],
                         );
@@ -99,7 +99,7 @@ fn try_match_types<'a>(
                         let mut new_info = rhs_info.clone();
                         *new_info.scalar_type_mut().unwrap() = to;
                         [(*rhs, *rhs_info)] = tr.add_node(
-                            mir::Node::MirOp(mir::MirOp::CastNum { from, to }),
+                            mir::MirOp::CastNum { from, to }.into(),
                             [new_info],
                             [*rhs],
                         );
@@ -135,7 +135,7 @@ fn try_match_types<'a>(
                     let mut new_val_info = val_info.clone();
                     *new_val_info.scalar_type_mut().unwrap() = to;
                     [(*val, *val_info)] = tr.add_node(
-                        mir::Node::MirOp(mir::MirOp::CastNum { from, to }),
+                        mir::MirOp::CastNum { from, to }.into(),
                         [new_val_info],
                         [*val],
                     );
@@ -305,7 +305,7 @@ fn try_match_shapes<'a>(
         match check {
             Either::Left(op) => {
                 [(*lhs, *lhs_info), (*rhs, *rhs_info)] = tr.add_node(
-                    mir::Node::MirOp(op),
+                    op.into(),
                     [lhs_info.clone(), rhs_info.clone()],
                     [*lhs, *rhs],
                 );
@@ -313,7 +313,7 @@ fn try_match_shapes<'a>(
             Either::Right((side, op)) => {
                 let (val, val_info) =
                     side.select((&mut *lhs, &mut *lhs_info), (&mut *rhs, &mut *rhs_info));
-                [(*val, *val_info)] = tr.add_node(mir::Node::MirOp(op), [val_info.clone()], [*val]);
+                [(*val, *val_info)] = tr.add_node(op.into(), [val_info.clone()], [*val]);
             }
         }
     }
@@ -444,6 +444,7 @@ pub fn pervasive_dyadic_rec(
 
 fn pervasive_dyadic(
     func_name: &'static str,
+    prim: mir::Prim,
     mut lhs: MirValue,
     mut rhs: MirValue,
     tr: &FunctionTranslation,
@@ -469,11 +470,7 @@ fn pervasive_dyadic(
 
     let output_info = pervasive_dyadic_rec(lhs_info, rhs_info, scalar_func)?;
 
-    let [(output, _)] = tr.add_node(
-        mir::Node::FuncPrim(mir::Prim::Prim(uiua::Primitive::Eq)),
-        [output_info],
-        [lhs, rhs],
-    );
+    let [(output, _)] = tr.add_node(prim.into(), [output_info], [lhs, rhs]);
 
     Ok(output)
 }
@@ -484,18 +481,26 @@ pub fn equals(
     tr: &FunctionTranslation,
     ctx: AnalyzeContext,
 ) -> Result<MirValue, Error> {
-    pervasive_dyadic("equals", lhs, rhs, tr, ctx, |l, r| {
-        Ok(match (l, r) {
-            (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
-            (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
-            #[allow(clippy::float_cmp)]
-            (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
-            (S::Char(l), S::Char(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
-            _ => ctx.error(ErrorKind::IncompatibleTypes(
-                "equals",
-                l.type_name().into(),
-                r.type_name().into(),
-            ))?,
-        })
-    })
+    pervasive_dyadic(
+        "equals",
+        uiua::Primitive::Eq.into(),
+        lhs,
+        rhs,
+        tr,
+        ctx,
+        |l, r| {
+            Ok(match (l, r) {
+                (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
+                (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
+                #[allow(clippy::float_cmp)]
+                (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
+                (S::Char(l), S::Char(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
+                _ => ctx.error(ErrorKind::IncompatibleTypes(
+                    "equals",
+                    l.type_name().into(),
+                    r.type_name().into(),
+                ))?,
+            })
+        },
+    )
 }
