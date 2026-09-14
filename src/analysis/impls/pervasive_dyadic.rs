@@ -3,7 +3,7 @@
 use itertools::Itertools;
 
 use super::{
-    AnalyzeContext, Error, ErrorKind, FunctionTranslation, MirValue, ValueInfo, mir, types,
+    AnalyzeContext, Error, ErrorKind, FunctionTranslation, TirValue, ValueInfo, tir, types,
 };
 use types::ScalarInfo as S;
 
@@ -54,8 +54,8 @@ fn try_match_scalar_types(lhs: types::ScalarInfo, rhs: types::ScalarInfo) -> Sca
 /// Attempt to insert casts to match scalar types
 fn try_match_types<'a>(
     func_name: &'static str,
-    (lhs, lhs_info): (&mut MirValue, &mut &'a ValueInfo),
-    (rhs, rhs_info): (&mut MirValue, &mut &'a ValueInfo),
+    (lhs, lhs_info): (&mut TirValue, &mut &'a ValueInfo),
+    (rhs, rhs_info): (&mut TirValue, &mut &'a ValueInfo),
     tr: &'a FunctionTranslation,
     ctx: AnalyzeContext,
 ) -> Result<(), Error> {
@@ -66,7 +66,7 @@ fn try_match_types<'a>(
             ScalarTypeMatch::Matching(side, from, to) => {
                 let (val, val_info) = side.select((lhs, lhs_info), (rhs, rhs_info));
                 [(*val, *val_info)] = tr.add_node(
-                    mir::MirOp::CastNum { from, to }.into(),
+                    tir::TirOp::CastNum { from, to }.into(),
                     [V::Scalar(to)],
                     [*val],
                 );
@@ -90,7 +90,7 @@ fn try_match_types<'a>(
                 ScalarTypeMatch::Matching(side, from, to) => match side {
                     Side::Left => {
                         [(*lhs, *lhs_info)] = tr.add_node(
-                            mir::MirOp::CastNum { from, to }.into(),
+                            tir::TirOp::CastNum { from, to }.into(),
                             [V::Scalar(to)],
                             [*lhs],
                         );
@@ -99,7 +99,7 @@ fn try_match_types<'a>(
                         let mut new_info = rhs_info.clone();
                         *new_info.scalar_type_mut().unwrap() = to;
                         [(*rhs, *rhs_info)] = tr.add_node(
-                            mir::MirOp::CastNum { from, to }.into(),
+                            tir::TirOp::CastNum { from, to }.into(),
                             [new_info],
                             [*rhs],
                         );
@@ -135,7 +135,7 @@ fn try_match_types<'a>(
                     let mut new_val_info = val_info.clone();
                     *new_val_info.scalar_type_mut().unwrap() = to;
                     [(*val, *val_info)] = tr.add_node(
-                        mir::MirOp::CastNum { from, to }.into(),
+                        tir::TirOp::CastNum { from, to }.into(),
                         [new_val_info],
                         [*val],
                     );
@@ -188,8 +188,8 @@ impl ValueInfo {
 }
 
 enum ShapeCheck {
-    Both(mir::MirOp),
-    One(Side, mir::MirOp),
+    Both(tir::TirOp),
+    One(Side, tir::TirOp),
 }
 fn try_match_shapes_rec(
     func_name: &'static str,
@@ -224,7 +224,7 @@ fn try_match_shapes_rec(
                 } else if let Some(l_const) = l_ax.as_const() {
                     checks.push(ShapeCheck::One(
                         Side::Right,
-                        mir::MirOp::CheckAxis {
+                        tir::TirOp::CheckAxis {
                             depth: 0,
                             ax_i,
                             length: l_const.cast_unsigned(),
@@ -233,7 +233,7 @@ fn try_match_shapes_rec(
                 } else if let Some(r_const) = r_ax.as_const() {
                     checks.push(ShapeCheck::One(
                         Side::Left,
-                        mir::MirOp::CheckAxis {
+                        tir::TirOp::CheckAxis {
                             depth: 0,
                             ax_i,
                             length: r_const.cast_unsigned(),
@@ -242,7 +242,7 @@ fn try_match_shapes_rec(
                 } else if let Some(0) = (l_ax.clone() - r_ax.clone()).as_const() {
                     // These unknown axes are known equal, no check needed
                 } else {
-                    checks.push(ShapeCheck::Both(mir::MirOp::CheckAxes {
+                    checks.push(ShapeCheck::Both(tir::TirOp::CheckAxes {
                         lhs_depth: 0,
                         lhs_ax_i: ax_i,
                         rhs_depth: 0,
@@ -258,12 +258,12 @@ fn try_match_shapes_rec(
                 ctx,
             )? {
                 checks.push(match check {
-                    ShapeCheck::Both(mir::MirOp::CheckAxes {
+                    ShapeCheck::Both(tir::TirOp::CheckAxes {
                         lhs_depth,
                         lhs_ax_i,
                         rhs_depth,
                         rhs_ax_i,
-                    }) => ShapeCheck::Both(mir::MirOp::CheckAxes {
+                    }) => ShapeCheck::Both(tir::TirOp::CheckAxes {
                         lhs_depth: lhs_depth + 1,
                         lhs_ax_i,
                         rhs_depth: rhs_depth + 1,
@@ -271,14 +271,14 @@ fn try_match_shapes_rec(
                     }),
                     ShapeCheck::One(
                         side,
-                        mir::MirOp::CheckAxis {
+                        tir::TirOp::CheckAxis {
                             depth,
                             ax_i,
                             length,
                         },
                     ) => ShapeCheck::One(
                         side,
-                        mir::MirOp::CheckAxis {
+                        tir::TirOp::CheckAxis {
                             depth: depth + 1,
                             ax_i,
                             length,
@@ -299,8 +299,8 @@ fn try_match_shapes_rec(
 
 fn try_match_shapes<'a>(
     func_name: &'static str,
-    (lhs, lhs_info): (&mut MirValue, &mut &'a ValueInfo),
-    (rhs, rhs_info): (&mut MirValue, &mut &'a ValueInfo),
+    (lhs, lhs_info): (&mut TirValue, &mut &'a ValueInfo),
+    (rhs, rhs_info): (&mut TirValue, &mut &'a ValueInfo),
     tr: &'a FunctionTranslation,
     ctx: AnalyzeContext,
 ) -> Result<(), Error> {
@@ -447,14 +447,14 @@ fn pervasive_dyadic_rec(
 
 fn pervasive_dyadic(
     func_name: &'static str,
-    prim: mir::Prim,
-    mut lhs: MirValue,
-    mut rhs: MirValue,
+    prim: tir::Prim,
+    mut lhs: TirValue,
+    mut rhs: TirValue,
     tr: &FunctionTranslation,
     ctx: AnalyzeContext,
     scalar_func: impl Fn(types::ScalarInfo, types::ScalarInfo) -> Result<types::ScalarInfo, Error>
     + Clone,
-) -> Result<MirValue, Error> {
+) -> Result<TirValue, Error> {
     let [mut lhs_info, mut rhs_info] = tr.infos([lhs, rhs]);
     try_match_types(
         func_name,
@@ -486,11 +486,11 @@ macro_rules! matching_type_func {
         )*
     ) => {
         pub fn $name(
-            lhs: MirValue,
-            rhs: MirValue,
+            lhs: TirValue,
+            rhs: TirValue,
             tr: &FunctionTranslation,
             ctx: AnalyzeContext,
-        ) -> Result<MirValue, Error> {
+        ) -> Result<TirValue, Error> {
             pervasive_dyadic(
                 $name_str,
                 $prim.into(),
@@ -567,11 +567,11 @@ macro_rules! float_funcs {
     ($($name:ident, $name_str:literal, $prim:path, $func:expr;)*) => {
         $(
             pub fn $name(
-                lhs: MirValue,
-                rhs: MirValue,
+                lhs: TirValue,
+                rhs: TirValue,
                 tr: &FunctionTranslation,
                 ctx: AnalyzeContext,
-            ) -> Result<MirValue, Error> {
+            ) -> Result<TirValue, Error> {
                 let func: fn(f64, f64) -> f64 = $func;
                 pervasive_dyadic(
                     $name_str,

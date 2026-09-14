@@ -7,8 +7,8 @@
 )]
 
 mod generic_ir;
-mod hir;
-mod mir;
+mod uir;
+mod tir;
 
 /// Simulation of data flow through a program and initial IR construction
 mod data_flow;
@@ -28,7 +28,7 @@ struct Args {
     output: Option<String>,
     // TODO: Eventually change the default to executable
     // TODO: Infer based on output filename extension when not provided
-    #[arg(long, value_enum, default_value_t = EmitFormat::Hir)]
+    #[arg(long, value_enum, default_value_t = EmitFormat::Uir)]
     emit: EmitFormat,
 }
 
@@ -38,8 +38,8 @@ enum EmitFormat {
     Ua,
     Uasm,
     Dot,
-    Hir,
-    Mir,
+    Uir,
+    Tir,
     LlvmIr,
     Executable,
 }
@@ -94,8 +94,8 @@ enum LoweringState {
     Ua(PathBuf),
     UaStr(String),
     Uasm(Box<uiua::Assembly>),
-    Hir(Box<hir::Hir>),
-    Mir(Box<mir::Mir>),
+    Uir(Box<uir::Uir>),
+    Tir(Box<tir::Tir>),
     Dot(String),
 }
 impl LoweringState {
@@ -103,8 +103,8 @@ impl LoweringState {
         match self {
             Self::Ua(_) | Self::UaStr(_) => EmitFormat::Ua,
             Self::Uasm(_) => EmitFormat::Uasm,
-            Self::Hir(_) => EmitFormat::Hir,
-            Self::Mir(_) => EmitFormat::Mir,
+            Self::Uir(_) => EmitFormat::Uir,
+            Self::Tir(_) => EmitFormat::Tir,
             Self::Dot(_) => EmitFormat::Dot,
         }
     }
@@ -126,14 +126,14 @@ impl LoweringState {
                     .load_str(ua_text)?
                     .finish(),
             )),
-            (Ls::Uasm(uasm), Ef::Hir) => Ls::Hir(Box::new(data_flow::construct_hir(uasm)?)),
-            (Ls::Hir(hir), Ef::Dot) => {
+            (Ls::Uasm(uasm), Ef::Uir) => Ls::Uir(Box::new(data_flow::construct_uir(uasm)?)),
+            (Ls::Uir(uir), Ef::Dot) => {
                 let mut result = String::new();
-                for (func, name) in hir
+                for (func, name) in uir
                     .bindings
                     .iter()
                     .map(|binding| (&binding.func, binding.func_id.to_string()))
-                    .chain(hir.main.as_ref().map(|(func, _)| (func, "main".into())))
+                    .chain(uir.main.as_ref().map(|(func, _)| (func, "main".into())))
                 {
                     let dot = petgraph::dot::Dot::new(&func.graph);
                     let mut dot_s = format!("{dot:?}")
@@ -153,10 +153,10 @@ impl LoweringState {
                 }
                 Self::Dot(result)
             }
-            (Ls::Hir(hir), Ef::Mir) => Ls::Mir(Box::new(analysis::construct_mir(hir)?)),
+            (Ls::Uir(uir), Ef::Tir) => Ls::Tir(Box::new(analysis::construct_tir(uir)?)),
             (Ls::Ua(_) | Ls::UaStr(_), ef) => self.convert_to(Ef::Uasm)?.convert_to(ef)?,
-            (Ls::Uasm(_), ef) => self.convert_to(Ef::Hir)?.convert_to(ef)?,
-            (Ls::Hir(_), ef) => self.convert_to(Ef::Mir)?.convert_to(ef)?,
+            (Ls::Uasm(_), ef) => self.convert_to(Ef::Uir)?.convert_to(ef)?,
+            (Ls::Uir(_), ef) => self.convert_to(Ef::Tir)?.convert_to(ef)?,
             _ => return Err(ProgramError::InvalidConversion(self.cur_format(), format)),
         })
     }
@@ -168,11 +168,11 @@ impl LoweringState {
             Ls::Uasm(uasm) => {
                 writeln!(output, "{}", uasm.to_uasm())?;
             }
-            Ls::Hir(hir) => {
-                writeln!(output, "{hir}")?;
+            Ls::Uir(uir) => {
+                writeln!(output, "{uir}")?;
             }
-            Ls::Mir(mir) => {
-                writeln!(output, "{mir}")?;
+            Ls::Tir(tir) => {
+                writeln!(output, "{tir}")?;
             }
             Ls::Dot(s) => {
                 writeln!(output, "{s}")?;
@@ -192,10 +192,10 @@ fn run() -> Result<(), ProgramError> {
             let uasm_text = std::fs::read_to_string(&path)?;
             LoweringState::Uasm(Box::new(uiua::Assembly::from_uasm(&uasm_text)?))
         }
-        Some(ext) if ext == "hir" => {
-            let hir_text = std::fs::read_to_string(&path)?;
-            let hir: hir::Hir = ron::from_str(&hir_text)?;
-            LoweringState::Hir(Box::new(hir))
+        Some(ext) if ext == "uir" => {
+            let uir_text = std::fs::read_to_string(&path)?;
+            let uir: uir::Uir = ron::from_str(&uir_text)?;
+            LoweringState::Uir(Box::new(uir))
         }
         None if args.filepath == "-" => {
             let mut ua_text = String::new();

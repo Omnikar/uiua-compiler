@@ -2,7 +2,7 @@ use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 
 use crate::generic_ir::{Graph, NodeIndex};
-use crate::hir::{Binding, Enum, Function, Hir, Node, Struct};
+use crate::uir::{Binding, Enum, Function, Uir, Node, Struct};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -60,8 +60,8 @@ impl WorkingFuncGraph {
     }
 }
 
-pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
-    let mut hir = Hir {
+pub fn construct_uir(uasm: &uiua::Assembly) -> Result<Uir, Error> {
+    let mut uir = Uir {
         structs: Vec::new(),
         enums: Vec::new(),
         bindings: Vec::new(),
@@ -76,7 +76,7 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
         ),
     };
 
-    let ignored_bindings = collect_structs_and_enums(uasm, &mut hir);
+    let ignored_bindings = collect_structs_and_enums(uasm, &mut uir);
 
     // Binding indices are based on the index at which they appear in the Uasm,
     // so enumerating the index map is enough to get them
@@ -92,7 +92,7 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
                     hash: function.hash(),
                     func: simulate_data_flow(uiua_node)?,
                 };
-                hir.bindings.push(binding);
+                uir.bindings.push(binding);
             }
             Bk::Const(_value) => {
                 // Constants are currently not compiled into the IR
@@ -102,10 +102,10 @@ pub fn construct_hir(uasm: &uiua::Assembly) -> Result<Hir, Error> {
     }
     if !uasm.root.is_empty() {
         let func = simulate_data_flow(&uasm.root)?;
-        hir.main = Some((func, uasm.root.span().unwrap_or(0)));
+        uir.main = Some((func, uasm.root.span().unwrap_or(0)));
     }
 
-    Ok(hir)
+    Ok(uir)
 }
 
 // --- Data flow analysis ---
@@ -468,17 +468,17 @@ fn enum_from_module(
 
 /// Find modules meeting the conditions to be a data def or variant,
 /// generate the appropriate struct and enum definitions, and place them in the IR
-fn collect_structs_and_enums(uasm: &uiua::Assembly, hir: &mut Hir) -> HashSet<usize> {
+fn collect_structs_and_enums(uasm: &uiua::Assembly, uir: &mut Uir) -> HashSet<usize> {
     // Bindings are indexed with usize
     let mut ignored_bindings: HashSet<usize> = HashSet::new();
 
     for (exp_name, exp_index) in &*uasm.exports {
         if let uiua::BindingKind::Module(module) = &uasm.bindings[*exp_index].kind {
             if let Some((struct_def, ignored)) = struct_from_module(exp_name, module, uasm) {
-                hir.structs.push(struct_def);
+                uir.structs.push(struct_def);
                 ignored_bindings.extend(&ignored);
             } else if let Some((enum_def, ignored)) = enum_from_module(exp_name, module, uasm) {
-                hir.enums.push(enum_def);
+                uir.enums.push(enum_def);
                 ignored_bindings.extend(&ignored);
             }
         }

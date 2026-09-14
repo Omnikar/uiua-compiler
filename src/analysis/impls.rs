@@ -1,16 +1,16 @@
 mod pervasive_monadic;
 mod pervasive_dyadic;
 
-use super::{AnalyzeContext, Error, ErrorKind, FunctionTranslation, MirValue, ValueInfo, types};
-use crate::{hir, mir};
+use super::{AnalyzeContext, Error, ErrorKind, FunctionTranslation, TirValue, ValueInfo, types};
+use crate::{uir, tir};
 
 use uiua::{ImplPrimitive as Ip, Primitive as Pr};
 
 pub type MonadicImplFn = fn(&ValueInfo, AnalyzeContext) -> Result<ValueInfo, Error>;
-pub fn monadic_prim(prim: hir::Prim) -> Option<MonadicImplFn> {
+pub fn monadic_prim(prim: uir::Prim) -> Option<MonadicImplFn> {
     use pervasive_monadic as pm;
     Some(match prim {
-        hir::Prim::Prim(prim) => match prim {
+        uir::Prim::Prim(prim) => match prim {
             Pr::Not => pm::not,
             Pr::Sign => pm::sign,
             Pr::Neg => pm::negate,
@@ -29,7 +29,7 @@ pub fn monadic_prim(prim: hir::Prim) -> Option<MonadicImplFn> {
             Pr::Round => pm::round,
             _ => return None,
         },
-        hir::Prim::Impl(impl_prim) => match impl_prim {
+        uir::Prim::Impl(impl_prim) => match impl_prim {
             Ip::Ln => pm::ln,
             Ip::Log2 => pm::log2,
             Ip::Log10 => pm::log10,
@@ -45,11 +45,11 @@ pub fn monadic_prim(prim: hir::Prim) -> Option<MonadicImplFn> {
 }
 
 pub type DyadicImplFn =
-    fn(MirValue, MirValue, &FunctionTranslation, AnalyzeContext) -> Result<MirValue, Error>;
-pub fn dyadic_prim(prim: hir::Prim) -> Option<DyadicImplFn> {
+    fn(TirValue, TirValue, &FunctionTranslation, AnalyzeContext) -> Result<TirValue, Error>;
+pub fn dyadic_prim(prim: uir::Prim) -> Option<DyadicImplFn> {
     use pervasive_dyadic as pd;
     Some(match prim {
-        hir::Prim::Prim(prim) => match prim {
+        uir::Prim::Prim(prim) => match prim {
             Pr::Eq => pd::equals,
             Pr::Ne => pd::not_equals,
             Pr::Lt => pd::less_than,
@@ -68,7 +68,7 @@ pub fn dyadic_prim(prim: hir::Prim) -> Option<DyadicImplFn> {
             Pr::Atan => pd::atangent,
             _ => return None,
         },
-        hir::Prim::Impl(impl_prim) => match impl_prim {
+        uir::Prim::Impl(impl_prim) => match impl_prim {
             Ip::Root => pd::root,
             // TODO: See https://github.com/uiua-lang/uiua/blob/8ff2203/src/impl_prim.rs#L107-L304
             _ => return None,

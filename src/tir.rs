@@ -10,7 +10,7 @@ use std::rc::Rc;
 use polynomial::Expr;
 
 #[derive(Debug, Clone, Serialize)]
-pub struct Mir {
+pub struct Tir {
     pub structs: Vec<Struct>,
     pub enums: Vec<Enum>,
     pub bindings: Vec<Binding>,
@@ -19,7 +19,7 @@ pub struct Mir {
     pub files: Rc<HashMap<PathBuf, String>>,
 }
 
-impl std::fmt::Display for Mir {
+impl std::fmt::Display for Tir {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let ron = ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::new()).unwrap();
         let ron = crate::generic_ir::flatten_ron_number_lists(&ron);
@@ -52,22 +52,22 @@ pub enum Prim {
     Prim(uiua::Primitive),
     Impl(uiua::ImplPrimitive),
 }
-impl From<crate::hir::Prim> for Prim {
-    fn from(prim: crate::hir::Prim) -> Self {
+impl From<crate::uir::Prim> for Prim {
+    fn from(prim: crate::uir::Prim) -> Self {
         match prim {
-            crate::hir::Prim::Prim(prim) => Self::Prim(prim),
-            crate::hir::Prim::Impl(impl_prim) => Self::Impl(impl_prim),
+            crate::uir::Prim::Prim(prim) => Self::Prim(prim),
+            crate::uir::Prim::Impl(impl_prim) => Self::Impl(impl_prim),
         }
     }
 }
-impl From<&crate::hir::Prim> for Prim {
-    fn from(prim: &crate::hir::Prim) -> Self {
+impl From<&crate::uir::Prim> for Prim {
+    fn from(prim: &crate::uir::Prim) -> Self {
         Self::from(*prim)
     }
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
-pub enum MirOp {
+pub enum TirOp {
     CastNum {
         from: types::ScalarInfo,
         to: types::ScalarInfo,
@@ -93,7 +93,7 @@ pub enum Node {
     Output,
     Constant(ValueInfo),
     FuncPrim(Prim),
-    MirOp(MirOp),
+    TirOp(TirOp),
     ModPrim(Prim, Vec<Function>),
     // Call(…),
     // ...
@@ -231,7 +231,7 @@ pub mod types {
     use std::rc::Rc;
 
     use super::{SymShape, ValueInfo};
-    use crate::mir::polynomial::Expr;
+    use crate::tir::polynomial::Expr;
 
     #[derive(Debug, Clone, Copy, Serialize)]
     pub enum ScalarInfo {

@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 // TODO: Name this
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Hir {
+pub struct Uir {
     pub structs: Vec<Struct>,
     pub enums: Vec<Enum>,
     pub bindings: Vec<Binding>,
@@ -15,7 +15,7 @@ pub struct Hir {
     pub files: Rc<HashMap<PathBuf, String>>,
 }
 
-impl std::fmt::Display for Hir {
+impl std::fmt::Display for Uir {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let ron = ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::new()).unwrap();
         let ron = crate::generic_ir::flatten_ron_number_lists(&ron);
