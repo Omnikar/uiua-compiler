@@ -49,18 +49,20 @@ impl FunctionTranslation<'_, '_> {
         node: mir::Node,
         info: impl Into<mir::NodeMeta>,
         inputs: impl IntoIterator<Item = MirValue>,
-    ) -> [MirValue; N] {
+    ) -> [(MirValue, &ValueInfo); N] {
         let mut graph = self.mir_graph.borrow_mut();
         let node_idx = graph.add_node(node);
         self.info_map.insert(node_idx, info.into());
         for (in_i, input) in inputs.into_iter().enumerate() {
             graph.add_edge(node_idx, input.node_idx, (input.out_i, in_i));
         }
-        (0..N)
-            .map(|out_i| MirValue { node_idx, out_i })
-            .collect_vec()
-            .try_into()
-            .unwrap()
+        <[MirValue; N]>::try_from(
+            (0..N)
+                .map(|out_i| MirValue { node_idx, out_i })
+                .collect_vec(),
+        )
+        .unwrap()
+        .map(|val| (val, &self.info_map[&val.node_idx][val.out_i]))
     }
 
     fn associate(&self, from: impl Into<HirValue>, to: impl Into<MirValue>) {
@@ -85,13 +87,16 @@ struct AnalyzeContext<'ctx> {
 }
 
 impl AnalyzeContext<'_> {
-    fn error<T>(&self, kind: ErrorKind) -> Result<T, Error> {
-        Err(Error::FancyError(Box::new(FancyError {
+    fn make_error(&self, kind: ErrorKind) -> Error {
+        Error::FancyError(Box::new(FancyError {
             files: Rc::clone(&self.tr.hir.files),
             span: self.span.clone(),
             input_spans: self.input_spans.iter().map(|&x| x.clone()).collect(),
             kind,
-        })))
+        }))
+    }
+    fn error<T>(&self, kind: ErrorKind) -> Result<T, Error> {
+        Err(self.make_error(kind))
     }
 }
 
@@ -214,13 +219,20 @@ fn translate_node(hir_node_idx: NodeIndex, tr: &FunctionTranslation) -> Result<(
                 Ok(v) => v,
                 Err(err) => ctx.error(ErrorKind::UiuaValue(err))?,
             };
-            let [value] = tr.add_node(mir::Node::Constant(value_info.clone()), [value_info], []);
+            let [(value, _)] =
+                tr.add_node(mir::Node::Constant(value_info.clone()), [value_info], []);
             tr.associate((hir_node_idx, 0), value);
         }
         hir::Node::FuncPrim(prim) if let Some(impl_fn) = impls::monadic_prim(*prim) => {
             let [input_info] = tr.infos([inputs[0]]);
             let output_info = impl_fn(input_info, ctx)?;
-            let [output] = tr.add_node(mir::Node::FuncPrim(prim.into()), [output_info], inputs);
+            let [(output, _)] =
+                tr.add_node(mir::Node::FuncPrim(prim.into()), [output_info], inputs);
+            tr.associate((hir_node_idx, 0), output);
+        }
+        hir::Node::FuncPrim(prim) if let Some(impl_fn) = impls::dyadic_prim(*prim) => {
+            let [lhs, rhs] = inputs.try_into().unwrap();
+            let output = impl_fn(lhs, rhs, tr, ctx)?;
             tr.associate((hir_node_idx, 0), output);
         }
         _ => todo!("{hir_node:?}"),
@@ -275,17 +287,21 @@ impl TryFrom<&uiua::Value> for ValueInfo {
                 .elements()
                 .map(Self::try_from)
                 .collect::<Result<Vec<_>, _>>()?;
-            let scalar_type = data
+            let element_type = data
                 .iter()
                 .cloned()
                 .map(Some)
                 .reduce(|x, y| x?.supertype(&y?))
                 .flatten()
                 .ok_or(UiuaValueError::NoArrayType)?;
-            Self::Array(Box::new(types::ArrayInfo::Known {
-                scalar_type,
+            let mut val = Self::Array(Box::new(types::ArrayInfo::Known {
+                element_type,
                 value: types::ArrayValue { shape, data },
-            }))
+            }));
+            if let Some(scalar_type) = val.scalar_type() {
+                val.upcast_scalars(scalar_type);
+            }
+            val
         })
     }
 }

@@ -22,10 +22,14 @@ pub struct FancyError {
 pub enum ErrorKind {
     #[error("{0}")]
     UiuaValue(UiuaValueError),
+    #[error("Could not infer input rank")]
+    Unranked(&'static str),
     #[error("Cannot take the {0} of a character")]
-    ExpectedNumber(&'static str),
+    ExpectedNumber(&'static str, Rc<str>),
     #[error("Incompatible types: {1} and {2}")]
     IncompatibleTypes(&'static str, Rc<str>, Rc<str>),
+    #[error("Incompatible shapes: {0} and {1}")]
+    IncompatibleShapes(Rc<str>, Rc<str>),
 }
 
 trait Msg {
@@ -93,31 +97,47 @@ impl FancyError {
     }
 
     pub fn eprint(&self) {
+        use ErrorKind as Ek;
         match self.kind.clone() {
-            ErrorKind::UiuaValue(err) => self.simple(err, err.to_string(), [] as [&str; 0]),
-            ErrorKind::ExpectedNumber(name) => self.simple(
-                &self.kind,
-                |c| format!("{} expects numbers", capitalize_first_letter(name).fg(c)),
-                ["Characters produced here"],
-            ),
-            ErrorKind::IncompatibleTypes(name, left, right) => self.simple(
+            Ek::UiuaValue(err) => self.simple(err, err.to_string(), [] as [&str; 0]),
+            Ek::Unranked(name) => self.simple(
                 &self.kind,
                 |c| {
                     format!(
-                        "{} cannot process these types",
-                        capitalize_first_letter(name).fg(c)
+                        "{} must know the rank of its inputs",
+                        capitalize(name).fg(c)
                     )
                 },
+                ["Could not infer rank"],
+            ),
+            Ek::ExpectedNumber(name, input) => self.simple(
+                &self.kind,
+                |c| format!("{} expects numbers", capitalize(name).fg(c)),
+                [|c| format!("{} produced here", capitalize(&input).fg(c))],
+            ),
+            Ek::IncompatibleTypes(name, left, right) => self.simple(
+                &self.kind,
+                |c| format!("{} cannot process these types", capitalize(name).fg(c)),
                 [
-                    Box::new(move |c| format!("Found {} here", left.fg(c))) as Box<dyn Msg>,
-                    Box::new(move |c| format!("Found {} here", right.fg(c))),
+                    Box::new(move |c| format!("{} produced here", capitalize(&left).fg(c)))
+                        as Box<dyn Msg>,
+                    Box::new(move |c| format!("{} produced here", capitalize(&right).fg(c))),
+                ],
+            ),
+            Ek::IncompatibleShapes(left, right) => self.simple(
+                &self.kind,
+                "Pervasive operations require matching shapes",
+                [
+                    Box::new(move |c| format!("{} produced here", capitalize(&left).fg(c)))
+                        as Box<dyn Msg>,
+                    Box::new(move |c| format!("{} produced here", capitalize(&right).fg(c))),
                 ],
             ),
         }
     }
 }
 
-fn capitalize_first_letter(s: &str) -> Cow<'_, str> {
+fn capitalize(s: &str) -> Cow<'_, str> {
     let mut chars = s.chars();
     if let Some(c) = chars.next()
         && c.is_lowercase()

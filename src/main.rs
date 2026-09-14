@@ -45,10 +45,9 @@ enum EmitFormat {
 }
 impl std::fmt::Display for EmitFormat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(val) = clap::ValueEnum::to_possible_value(self) {
-            val.get_name().fmt(f)
-        } else {
-            write!(f, "given format")
+        match clap::ValueEnum::to_possible_value(self) {
+            Some(val) => val.get_name().fmt(f),
+            None => write!(f, "given format"),
         }
     }
 }
