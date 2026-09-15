@@ -535,6 +535,7 @@ matching_type_func! {
 
 matching_type_func! {
     less_than, "less than", Pr::Lt;
+    // TODO: Optimize this branch to return known output even with one input unknown when possible
     (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| l && !r)),
     (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l > r)),
     (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l > r)),
@@ -543,6 +544,7 @@ matching_type_func! {
 
 matching_type_func! {
     less_or_equal, "less or equal", Pr::Le;
+    // TODO: Optimize this branch to return known output even with one input unknown when possible
     (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| l || !r)),
     (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l >= r)),
     (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l >= r)),
@@ -551,6 +553,7 @@ matching_type_func! {
 
 matching_type_func! {
     greater_than, "greater than", Pr::Gt;
+    // TODO: Optimize this branch to return known output even with one input unknown when possible
     (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| !l && r)),
     (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l < r)),
     (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l < r)),
@@ -559,6 +562,7 @@ matching_type_func! {
 
 matching_type_func! {
     greater_or_equal, "greater or equal", Pr::Ge;
+    // TODO: Optimize this branch to return known output even with one input unknown when possible
     (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| !l || r)),
     (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l <= r)),
     (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l <= r)),
