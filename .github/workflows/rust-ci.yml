@@ -7,7 +7,7 @@ on:
 
 jobs:
   check:
-    name: Cargo Check
+    name: cargo check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
