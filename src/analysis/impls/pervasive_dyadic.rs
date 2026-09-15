@@ -223,23 +223,27 @@ fn try_match_shapes_rec(
                         ))?;
                     }
                 } else if let Some(l_const) = l_ax.as_const() {
-                    checks.push(ShapeCheck::One(
-                        Side::Right,
-                        tir::TirOp::CheckAxis {
-                            depth: 0,
-                            ax_i,
-                            length: l_const.cast_unsigned(),
-                        },
-                    ));
+                    if l_const != 1 {
+                        checks.push(ShapeCheck::One(
+                            Side::Right,
+                            tir::TirOp::CheckAxis {
+                                depth: 0,
+                                ax_i,
+                                length: l_const.cast_unsigned(),
+                            },
+                        ));
+                    }
                 } else if let Some(r_const) = r_ax.as_const() {
-                    checks.push(ShapeCheck::One(
-                        Side::Left,
-                        tir::TirOp::CheckAxis {
-                            depth: 0,
-                            ax_i,
-                            length: r_const.cast_unsigned(),
-                        },
-                    ));
+                    if r_const != 1 {
+                        checks.push(ShapeCheck::One(
+                            Side::Left,
+                            tir::TirOp::CheckAxis {
+                                depth: 0,
+                                ax_i,
+                                length: r_const.cast_unsigned(),
+                            },
+                        ));
+                    }
                 } else if let Some(0) = (l_ax.clone() - r_ax.clone()).as_const() {
                     // These unknown axes are known equal, no check needed
                 } else {
@@ -408,22 +412,20 @@ fn pervasive_dyadic_rec(
             for eob in lhs_shape.iter().zip_longest(rhs_shape.iter()) {
                 match eob {
                     itertools::EitherOrBoth::Both(l_ax, r_ax) => {
-                        if let Some((l, r)) = l_ax.as_const().zip(r_ax.as_const()) {
-                            if l == 1 {
-                                new_shape.push(r_ax.clone());
-                            } else if r == 1 {
-                                new_shape.push(l_ax.clone());
-                            } else {
+                        match (l_ax.as_const(), r_ax.as_const()) {
+                            (Some(1), _) => new_shape.push(r_ax.clone()),
+                            (_, Some(1)) => new_shape.push(l_ax.clone()),
+                            (Some(l), Some(r)) => {
                                 assert_eq!(l, r);
-                                new_shape.push(l.into());
+                                new_shape.push(l_ax.clone());
                             }
-                            continue;
-                        }
-                        // NOTE: Could do some equivalence class nonsense to keep track of what axis equalities have already been checked and potentially omit checks later, though it would probably be a lot more work than it's worth
-                        if r_ax.as_const().is_some() {
-                            new_shape.push(r_ax.clone());
-                        } else {
-                            new_shape.push(l_ax.clone());
+                            // NOTE: Could do some equivalence class nonsense to keep track of what axis equalities have already been checked and potentially omit checks later, though it would probably be a lot more work than it's worth
+                            (_, Some(_)) => {
+                                new_shape.push(r_ax.clone());
+                            }
+                            _ => {
+                                new_shape.push(l_ax.clone());
+                            }
                         }
                     }
                     itertools::EitherOrBoth::Left(ax) | itertools::EitherOrBoth::Right(ax) => {
