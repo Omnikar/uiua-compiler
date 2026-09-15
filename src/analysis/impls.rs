@@ -1,8 +1,8 @@
 mod pervasive_monadic;
 mod pervasive_dyadic;
 
-use super::{AnalyzeContext, Error, ErrorKind, FunctionTranslation, TirValue, ValueInfo, types};
-use crate::{uir, tir};FunctionTranslator
+use super::{AnalyzeContext, Error, ErrorKind, FunctionTranslator, TirValue, ValueInfo, types};
+use crate::{tir, uir};
 
 use uiua::{ImplPrimitive as Ip, Primitive as Pr};
 
@@ -45,7 +45,7 @@ pub fn monadic_prim(prim: uir::Prim) -> Option<MonadicImplFn> {
 }
 
 pub type DyadicImplFn =
-    fn(TirValue, TirValue, &FunctionTranslation, AnalyzeContext) -> Result<TirValue, Error>;
+    fn(TirValue, TirValue, &FunctionTranslator, AnalyzeContext) -> Result<TirValue, Error>;
 pub fn dyadic_prim(prim: uir::Prim) -> Option<DyadicImplFn> {
     use pervasive_dyadic as pd;
     Some(match prim {
@@ -61,7 +61,7 @@ pub fn dyadic_prim(prim: uir::Prim) -> Option<DyadicImplFn> {
             // subtract
             // multiply
             Pr::Div => pd::divide,
-            // moduloFunctionTranslator
+            // modulo
             // power
             // minimum
             // maximum

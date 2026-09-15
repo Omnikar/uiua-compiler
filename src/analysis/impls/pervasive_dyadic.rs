@@ -488,7 +488,7 @@ macro_rules! matching_type_func {
         pub fn $name(
             lhs: TirValue,
             rhs: TirValue,
-            tr: &FunctionTranslation,
+            tr: &FunctionTranslator,
             ctx: AnalyzeContext,
         ) -> Result<TirValue, Error> {
             pervasive_dyadic(
@@ -569,7 +569,7 @@ macro_rules! float_funcs {
             pub fn $name(
                 lhs: TirValue,
                 rhs: TirValue,
-                tr: &FunctionTranslation,
+                tr: &FunctionTranslator,
                 ctx: AnalyzeContext,
             ) -> Result<TirValue, Error> {
                 let func: fn(f64, f64) -> f64 = $func;
