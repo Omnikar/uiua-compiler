@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use serde_with::{DeserializeFromStr, SerializeDisplay};
 use std::collections::HashMap;
 use std::ops::{Add, Mul, Sub};
 use std::rc::Rc;
@@ -7,7 +8,7 @@ use std::rc::Rc;
 ///
 /// The polynomial is represented as a hashmap from exponent values to coefficients. For example, an entry of `[1, 2] -> 3` represents the term `3x₀x₁²` in the polynomial.
 /// No stored coefficients should be zero, and no exponent lists should have trailing zeros.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, SerializeDisplay, DeserializeFromStr)]
 pub struct Expr {
     terms: HashMap<Rc<[u32]>, isize>,
 }
@@ -20,9 +21,14 @@ impl Expr {
         }
 
         let nvars = NVARS.get();
-        let mut exponents = vec![0; nvars];
-        exponents.push(1);
+        let var = Self::var_with_idx(nvars);
         NVARS.set(nvars + 1);
+        var
+    }
+
+    fn var_with_idx(idx: usize) -> Self {
+        let mut exponents = vec![0; idx];
+        exponents.push(1);
         Self {
             terms: [(exponents.into(), 1)].into(),
         }
@@ -116,6 +122,11 @@ impl Mul<Expr> for isize {
         rhs * self
     }
 }
+impl std::iter::Sum for Expr {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(0isize.into(), |x, y| x + y)
+    }
+}
 impl std::iter::Product for Expr {
     fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(1isize.into(), |x, y| x * y)
@@ -160,12 +171,46 @@ impl std::fmt::Display for Expr {
         write!(f, "{s}")
     }
 }
-impl serde::Serialize for Expr {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&format!("{self}"))
+
+#[derive(thiserror::Error, Debug)]
+#[error("Syntax error in polynomial expression")]
+pub struct SyntaxError;
+impl std::str::FromStr for Expr {
+    type Err = SyntaxError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.split('+')
+            .map(|term| {
+                let (coef, term) = term.trim().split_once('x').unwrap_or((term, ""));
+                let coef: isize = if coef.is_empty() {
+                    1
+                } else {
+                    coef.parse().map_err(|_| SyntaxError)?
+                };
+                if term.is_empty() {
+                    return Ok(coef.into());
+                }
+                Ok(coef
+                    * term
+                        .split('x')
+                        .map(|sub_sup| {
+                            let split_idx = sub_sup.match_indices(SUPERSCRIPT_CHARS).next();
+                            Ok(match split_idx {
+                                Some((split_idx, _)) => {
+                                    let (sub, sup) = sub_sup.split_at(split_idx);
+                                    (
+                                        decode_num(sub, &SUBSCRIPT_CHARS)?,
+                                        decode_num(sup, &SUPERSCRIPT_CHARS)?,
+                                    )
+                                }
+                                None => (decode_num(sub_sup, &SUBSCRIPT_CHARS)?, 1),
+                            })
+                        })
+                        .map(|x| {
+                            x.map(|(sub, sup)| Expr::var_with_idx(sub).pow(sup.try_into().unwrap()))
+                        })
+                        .product::<Result<Expr, _>>()?)
+            })
+            .sum::<Result<Expr, _>>()
     }
 }
 
@@ -176,4 +221,13 @@ fn encode_num(num: usize, chars: &[char; 10]) -> String {
         .chars()
         .map(|c| chars[c.to_digit(10).unwrap() as usize])
         .collect()
+}
+fn decode_num(s: &str, chars: &[char; 10]) -> Result<usize, SyntaxError> {
+    s.chars()
+        .map(|c| chars.binary_search(&c).ok())
+        .rev()
+        .enumerate()
+        .map(|(i, x)| x.map(|x| x * 10usize.pow(u32::try_from(i).unwrap())))
+        .sum::<Option<usize>>()
+        .ok_or(SyntaxError)
 }

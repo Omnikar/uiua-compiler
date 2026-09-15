@@ -1,18 +1,16 @@
 mod pervasive_monadic;
 mod pervasive_dyadic;
 
-use super::{AnalyzeContext, Error, ErrorKind, ValueInfo, types};
-use crate::hir;
+use super::{AnalyzeContext, Error, ErrorKind, FunctionTranslator, TirValue, ValueInfo, types};
+use crate::{tir, uir};
 
-type SingleAnalyzeResult = Result<ValueInfo, Error>;
+use uiua::{ImplPrimitive as Ip, Primitive as Pr};
 
-pub type MonadicImplFn = fn(&ValueInfo, AnalyzeContext) -> SingleAnalyzeResult;
-pub fn monadic_prim(prim: hir::Prim) -> Option<MonadicImplFn> {
+pub type MonadicImplFn = fn(&ValueInfo, AnalyzeContext) -> Result<ValueInfo, Error>;
+pub fn monadic_prim(prim: uir::Prim) -> Option<MonadicImplFn> {
     use pervasive_monadic as pm;
-    use uiua::ImplPrimitive as Ip;
-    use uiua::Primitive as Pr;
     Some(match prim {
-        hir::Prim::Prim(prim) => match prim {
+        uir::Prim::Prim(prim) => match prim {
             Pr::Not => pm::not,
             Pr::Sign => pm::sign,
             Pr::Neg => pm::negate,
@@ -31,7 +29,7 @@ pub fn monadic_prim(prim: hir::Prim) -> Option<MonadicImplFn> {
             Pr::Round => pm::round,
             _ => return None,
         },
-        hir::Prim::Impl(impl_prim) => match impl_prim {
+        uir::Prim::Impl(impl_prim) => match impl_prim {
             Ip::Ln => pm::ln,
             Ip::Log2 => pm::log2,
             Ip::Log10 => pm::log10,
@@ -46,17 +44,33 @@ pub fn monadic_prim(prim: hir::Prim) -> Option<MonadicImplFn> {
     })
 }
 
-pub type DyadicImplFn = fn(&ValueInfo, &ValueInfo, AnalyzeContext) -> SingleAnalyzeResult;
-pub fn dyadic_prim(prim: hir::Prim) -> Option<DyadicImplFn> {
+pub type DyadicImplFn =
+    fn(TirValue, TirValue, &FunctionTranslator, AnalyzeContext) -> Result<TirValue, Error>;
+pub fn dyadic_prim(prim: uir::Prim) -> Option<DyadicImplFn> {
     use pervasive_dyadic as pd;
-    use uiua::ImplPrimitive as Ip;
-    use uiua::Primitive as Pr;
     Some(match prim {
-        hir::Prim::Prim(prim) => match prim {
+        uir::Prim::Prim(prim) => match prim {
             Pr::Eq => pd::equals,
+            Pr::Ne => pd::not_equals,
+            Pr::Lt => pd::less_than,
+            Pr::Le => pd::less_or_equal,
+            Pr::Gt => pd::greater_than,
+            Pr::Ge => pd::greater_or_equal,
+            // TODO:
+            // add
+            // subtract
+            // multiply
+            Pr::Div => pd::divide,
+            // modulo
+            // power
+            // minimum
+            // maximum
+            Pr::Atan => pd::atangent,
             _ => return None,
         },
-        hir::Prim::Impl(impl_prim) => match impl_prim {
+        uir::Prim::Impl(impl_prim) => match impl_prim {
+            Ip::Root => pd::root,
+            // TODO: See https://github.com/uiua-lang/uiua/blob/8ff2203/src/impl_prim.rs#L107-L304
             _ => return None,
         },
     })

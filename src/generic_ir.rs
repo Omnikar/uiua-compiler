@@ -68,10 +68,9 @@ impl<Meta, Node, NodeMeta> Function<Meta, Node, NodeMeta> {
         for e in self.graph.edge_references() {
             let new_source = *node_idx_map.get_by_left(&e.source()).unwrap();
             let new_target = *node_idx_map.get_by_left(&e.target()).unwrap();
-            let e_idx = if let Some(e) = new_graph.edges_connecting(new_source, new_target).next() {
-                e.id()
-            } else {
-                new_graph.add_edge(new_source, new_target, HashSet::new())
+            let e_idx = match new_graph.edges_connecting(new_source, new_target).next() {
+                Some(e) => e.id(),
+                None => new_graph.add_edge(new_source, new_target, HashSet::new()),
             };
             new_graph[e_idx].insert(*e.weight());
         }

@@ -1,11 +1,12 @@
+use derive_more::From;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-// TODO: Name this
+// Untyped IR, generated directly from Uasm
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Hir {
+pub struct Uir {
     pub structs: Vec<Struct>,
     pub enums: Vec<Enum>,
     pub bindings: Vec<Binding>,
@@ -14,7 +15,7 @@ pub struct Hir {
     pub files: Rc<HashMap<PathBuf, String>>,
 }
 
-impl std::fmt::Display for Hir {
+impl std::fmt::Display for Uir {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let ron = ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::new()).unwrap();
         let ron = crate::generic_ir::flatten_ron_number_lists(&ron);
@@ -42,13 +43,13 @@ pub struct Enum {
     pub variants: Vec<Struct>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, From, Serialize, Deserialize)]
 pub enum Prim {
     Prim(uiua::Primitive),
     Impl(uiua::ImplPrimitive),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, From, Serialize, Deserialize)]
 pub enum Node {
     Input,
     Output,
@@ -72,7 +73,7 @@ impl crate::generic_ir::FunctionNode for Node {
     }
 }
 
-/// A Uiua function represented in HIR
+/// A Uiua function represented in UIR
 ///
 /// Graph nodes are expected to be added in program order.
 pub type Function = crate::generic_ir::Function<(), Node, ()>;

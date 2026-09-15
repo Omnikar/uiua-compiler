@@ -1,19 +1,22 @@
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::cast_possible_truncation)]
 
-use super::{AnalyzeContext, Error, ErrorKind, SingleAnalyzeResult, ValueInfo, types};
+use super::{AnalyzeContext, Error, ErrorKind, ValueInfo, types};
 use types::ScalarInfo as S;
 
 fn pervasive_monadic(
     input_info: &ValueInfo,
     scalar_func: impl Fn(types::ScalarInfo) -> Result<types::ScalarInfo, Error> + Clone,
-) -> SingleAnalyzeResult {
+) -> Result<ValueInfo, Error> {
     Ok(match input_info {
         ValueInfo::Scalar(scalar_info) => scalar_func(*scalar_info).map(ValueInfo::Scalar)?,
         ValueInfo::Array(array_info) => match &**array_info {
-            types::ArrayInfo::Known { scalar_type, value } => {
+            types::ArrayInfo::Known {
+                element_type,
+                value,
+            } => {
                 // TODO: Size limit for pre-evaluation?
-                let scalar_type = pervasive_monadic(scalar_type, scalar_func.clone())?;
+                let element_type = pervasive_monadic(element_type, scalar_func.clone())?;
                 let value = types::ArrayValue {
                     shape: value.shape.clone(),
                     data: value
@@ -22,23 +25,29 @@ fn pervasive_monadic(
                         .map(|x| pervasive_monadic(x, scalar_func.clone()))
                         .collect::<Result<Vec<_>, _>>()?,
                 };
-                ValueInfo::Array(Box::new(types::ArrayInfo::Known { scalar_type, value }))
+                ValueInfo::Array(Box::new(types::ArrayInfo::Known {
+                    element_type,
+                    value,
+                }))
             }
-            types::ArrayInfo::Ranked { scalar_type, shape } => {
-                let scalar_type = pervasive_monadic(scalar_type, scalar_func)?;
+            types::ArrayInfo::Ranked {
+                element_type,
+                shape,
+            } => {
+                let element_type = pervasive_monadic(element_type, scalar_func)?;
                 ValueInfo::Array(Box::new(types::ArrayInfo::Ranked {
-                    scalar_type,
+                    element_type,
                     shape: shape.clone(),
                 }))
             }
             types::ArrayInfo::Unranked {
-                scalar_type,
+                element_type,
                 shape_prefix,
                 shape_suffix,
             } => {
-                let scalar_type = pervasive_monadic(scalar_type, scalar_func)?;
+                let element_type = pervasive_monadic(element_type, scalar_func)?;
                 ValueInfo::Array(Box::new(types::ArrayInfo::Unranked {
-                    scalar_type,
+                    element_type,
                     shape_prefix: shape_prefix.clone(),
                     shape_suffix: shape_suffix.clone(),
                 }))
@@ -56,30 +65,30 @@ fn float_func(
     input_info: &ValueInfo,
     ctx: AnalyzeContext,
     func: fn(f64) -> f64,
-    error: ErrorKind,
-) -> SingleAnalyzeResult {
+    error: impl Fn() -> ErrorKind,
+) -> Result<ValueInfo, Error> {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
             S::Bool(b) => S::Float(b.map(|b| func(f64::from(b)))),
             S::Int(i) => S::Float(i.map(|i| func(i as f64))),
             S::Float(f) => S::Float(f.map(func)),
-            S::Char(_) => ctx.error(error)?,
+            S::Char(_) => ctx.error(error())?,
         })
     })
 }
 
-pub fn not(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult {
+pub fn not(input_info: &ValueInfo, ctx: AnalyzeContext) -> Result<ValueInfo, Error> {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
             S::Bool(b) => S::Bool(b.map(|b| !b)),
             S::Int(i) => S::Int(i.map(|i| 1 - i)),
             S::Float(f) => S::Float(f.map(|f| 1.0 - f)),
-            S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("not"))?,
+            S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("not", input_info.type_name()))?,
         })
     })
 }
 
-pub fn sign(input_info: &ValueInfo, _ctx: AnalyzeContext) -> SingleAnalyzeResult {
+pub fn sign(input_info: &ValueInfo, _ctx: AnalyzeContext) -> Result<ValueInfo, Error> {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
             S::Bool(_) => scalar,
@@ -92,7 +101,7 @@ pub fn sign(input_info: &ValueInfo, _ctx: AnalyzeContext) -> SingleAnalyzeResult
     })
 }
 
-pub fn negate(input_info: &ValueInfo, _ctx: AnalyzeContext) -> SingleAnalyzeResult {
+pub fn negate(input_info: &ValueInfo, _ctx: AnalyzeContext) -> Result<ValueInfo, Error> {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
             S::Bool(b) => S::Int(b.map(|b| -i64::from(b))),
@@ -117,7 +126,7 @@ pub fn negate(input_info: &ValueInfo, _ctx: AnalyzeContext) -> SingleAnalyzeResu
     })
 }
 
-pub fn absolute_value(input_info: &ValueInfo, _ctx: AnalyzeContext) -> SingleAnalyzeResult {
+pub fn absolute_value(input_info: &ValueInfo, _ctx: AnalyzeContext) -> Result<ValueInfo, Error> {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
             S::Bool(_) => scalar,
@@ -135,32 +144,34 @@ pub fn absolute_value(input_info: &ValueInfo, _ctx: AnalyzeContext) -> SingleAna
     })
 }
 
-pub fn floor(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult {
+pub fn floor(input_info: &ValueInfo, ctx: AnalyzeContext) -> Result<ValueInfo, Error> {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
             S::Bool(_) | S::Int(_) => scalar,
             S::Float(f) => S::Int(f.map(|f| f.floor() as i64)),
-            S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("floor"))?,
+            S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("floor", input_info.type_name()))?,
         })
     })
 }
 
-pub fn ceiling(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult {
+pub fn ceiling(input_info: &ValueInfo, ctx: AnalyzeContext) -> Result<ValueInfo, Error> {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
             S::Bool(_) | S::Int(_) => scalar,
             S::Float(f) => S::Int(f.map(|f| f.ceil() as i64)),
-            S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("ceiling"))?,
+            S::Char(_) => {
+                ctx.error(ErrorKind::ExpectedNumber("ceiling", input_info.type_name()))?
+            }
         })
     })
 }
 
-pub fn round(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult {
+pub fn round(input_info: &ValueInfo, ctx: AnalyzeContext) -> Result<ValueInfo, Error> {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
             S::Bool(_) | S::Int(_) => scalar,
             S::Float(f) => S::Int(f.map(|f| f.round() as i64)),
-            S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("round"))?,
+            S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("round", input_info.type_name()))?,
         })
     })
 }
@@ -170,12 +181,12 @@ pub fn round(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult
 macro_rules! float_funcs {
     ($($name:ident, $name_str:literal, $func:expr;)*) => {
         $(
-            pub fn $name(input_info: &ValueInfo, ctx: AnalyzeContext) -> SingleAnalyzeResult {
+            pub fn $name(input_info: &ValueInfo, ctx: AnalyzeContext) -> Result<ValueInfo, Error> {
                 float_func(
                     input_info,
                     ctx,
                     $func,
-                    ErrorKind::ExpectedNumber($name_str),
+                    || ErrorKind::ExpectedNumber($name_str, input_info.type_name()),
                 )
             }
         )*
