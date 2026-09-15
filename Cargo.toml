@@ -35,3 +35,4 @@ libffi-sys = { version = "3.3.3", features = ["system"] }
 
 [profile.release]
 opt-level = "s"
+lto = true
