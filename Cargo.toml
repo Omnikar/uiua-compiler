@@ -35,4 +35,6 @@ libffi-sys = { version = "3.3.3", features = ["system"] }
 
 [profile.release]
 opt-level = "s"
+strip = true
 lto = true
+codegen-units = 1
