@@ -25,6 +25,7 @@ rand = "0.10.2"
 regex = "1"
 ron = "0.12.2"
 serde = "1"
+serde_with = "3"
 
 # Compilation
 inkwell = { version = "0.10.0", features = ["llvm22-1"] }

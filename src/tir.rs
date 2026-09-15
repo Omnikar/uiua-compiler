@@ -10,7 +10,7 @@ use std::rc::Rc;
 use polynomial::Expr;
 
 /// Typed IR, created via static analysis of UIR
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tir {
     pub structs: Vec<Struct>,
     pub enums: Vec<Enum>,
@@ -28,7 +28,7 @@ impl std::fmt::Display for Tir {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Binding {
     pub span: uiua::CodeSpan,
     pub func_id: uiua::FunctionId,
@@ -36,13 +36,13 @@ pub struct Binding {
     pub func: Function,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Struct {
     pub name: String,
     pub info: types::StructInfo,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Enum {
     pub name: String,
     pub info: types::EnumInfo,
@@ -67,7 +67,7 @@ impl From<&crate::uir::Prim> for Prim {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum TirOp {
     CastNum {
         from: types::ScalarInfo,
@@ -88,7 +88,7 @@ pub enum TirOp {
     },
 }
 
-#[derive(Debug, Clone, Serialize, From)]
+#[derive(Debug, Clone, From, Serialize, Deserialize)]
 pub enum Node {
     Input,
     Output,
@@ -117,7 +117,7 @@ impl crate::generic_ir::FunctionNode for Node {
 /// Values output by a node
 pub type NodeMeta = Vec<ValueInfo>;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionMeta {
     pub inputs: Vec<ValueInfo>,
     pub outputs: Vec<ValueInfo>,
@@ -139,7 +139,7 @@ pub fn demote_known_shape(known_shape: &[usize]) -> Vec<Expr> {
     known_shape.iter().copied().map(Expr::from).collect()
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ValueInfo {
     Scalar(types::ScalarInfo),
     Array(Box<types::ArrayInfo>),
@@ -234,7 +234,7 @@ pub mod types {
     use super::{SymShape, ValueInfo};
     use crate::tir::polynomial::Expr;
 
-    #[derive(Debug, Clone, Copy, Serialize)]
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
     pub enum ScalarInfo {
         Bool(Option<bool>),
         Int(Option<i64>),
@@ -253,13 +253,13 @@ pub mod types {
         }
     }
 
-    #[derive(Debug, Clone, Serialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct ArrayValue {
         pub shape: Vec<usize>,
         pub data: Vec<ValueInfo>,
     }
 
-    #[derive(Debug, Clone, Serialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum ArrayInfo {
         /// Exact value known at compile time
         Known {
@@ -449,7 +449,7 @@ pub mod types {
         }
     }
 
-    #[derive(Debug, Clone, Serialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct MapInfo {
         pub key_type: ValueInfo,
         pub value_type: ValueInfo,
@@ -466,12 +466,12 @@ pub mod types {
         }
     }
 
-    #[derive(Debug, Clone, Serialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct StructInfo {
         pub fields: Rc<[(String, ValueInfo)]>,
     }
 
-    #[derive(Debug, Clone, Serialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct EnumInfo {
         pub variants: Rc<[(String, StructInfo)]>,
     }

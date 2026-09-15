@@ -197,6 +197,11 @@ fn run() -> Result<(), ProgramError> {
             let uir: uir::Uir = ron::from_str(&uir_text)?;
             LoweringState::Uir(Box::new(uir))
         }
+        Some(ext) if ext == "tir" => {
+            let tir_text = std::fs::read_to_string(&path)?;
+            let tir: tir::Tir = ron::from_str(&tir_text)?;
+            LoweringState::Tir(Box::new(tir))
+        }
         None if args.filepath == "-" => {
             let mut ua_text = String::new();
             std::io::stdin().read_to_string(&mut ua_text)?;
