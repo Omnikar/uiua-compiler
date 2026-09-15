@@ -97,7 +97,6 @@ fn try_match_types<'a>(
                     }
                     Side::Right => {
                         let mut new_info = rhs_info.clone();
-                        *new_info.scalar_type_mut().unwrap() = to;
                         new_info.upcast_scalars(to);
                         [(*rhs, *rhs_info)] = tr.add_node(
                             tir::TirOp::CastNum { from, to }.into(),
@@ -134,7 +133,7 @@ fn try_match_types<'a>(
                 ScalarTypeMatch::Matching(side, from, to) => {
                     let (val, val_info) = side.select((lhs, lhs_info), (rhs, rhs_info));
                     let mut new_val_info = val_info.clone();
-                    *new_val_info.scalar_type_mut().unwrap() = to;
+                    new_val_info.upcast_scalars(to);
                     [(*val, *val_info)] = tr.add_node(
                         tir::TirOp::CastNum { from, to }.into(),
                         [new_val_info],
