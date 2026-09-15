@@ -10,6 +10,11 @@ jobs:
     name: cargo check
     runs-on: ubuntu-latest
     steps:
+      - name: Install LLVM 22
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
       - name: Checkout
         uses: actions/checkout@v4
       - name: Set up Rust toolchain
