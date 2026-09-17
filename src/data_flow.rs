@@ -451,30 +451,36 @@ fn enum_from_module(
     module: &uiua::Module,
     uasm: &uiua::Assembly,
 ) -> Option<(Enum, HashSet<usize>)> {
-    let mut ignored_bindings: HashSet<usize> = HashSet::new();
-
-    if let Some(variants) = get_string_array_member("Variants", module, uasm) {
-        let mut enum_def = Enum {
-            name: name.into(),
-            variants: Vec::new(),
-        };
-        for variant in variants {
-            let uiua::BindingKind::Module(variant_module) = &uasm.bindings[get_module_item_index(
-                &variant,
-                module,
-                uiua::LookupPreference::Module,
-                uasm,
+    if let Some(variants) = get_string_array_member("Variants", module, uasm)
+        && let Some((structs, ignored_bindings)) = variants
+            .iter()
+            .map(|v| {
+                get_module_item_index(v, module, uiua::LookupPreference::Module, uasm).and_then(
+                    |idx| match &uasm.bindings[idx].kind {
+                        uiua::BindingKind::Module(variant_module) => {
+                            struct_from_module(v, variant_module, uasm)
+                        }
+                        _ => None,
+                    },
+                )
+            })
+            .try_fold(
+                (Vec::new(), HashSet::new()),
+                |(mut structs, mut ignored), struct_and_ignored| {
+                    let (struct_def, ignored_from_struct) = struct_and_ignored?;
+                    structs.push(struct_def);
+                    ignored.extend(ignored_from_struct);
+                    Some((structs, ignored))
+                },
             )
-            .unwrap()]
-            .kind
-            else {
-                panic!("{name} has a member matching a variant name that is not a module")
-            };
-            let (struct_def, ignored) = struct_from_module(&variant, variant_module, uasm).unwrap();
-            ignored_bindings.extend(ignored);
-            enum_def.variants.push(struct_def);
-        }
-        Some((enum_def, ignored_bindings))
+    {
+        Some((
+            Enum {
+                name: name.into(),
+                variants: structs,
+            },
+            ignored_bindings,
+        ))
     } else {
         None
     }
