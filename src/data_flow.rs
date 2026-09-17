@@ -402,6 +402,7 @@ fn get_string_array_member(
 fn struct_from_module(
     name: &str,
     module: &uiua::Module,
+    span: uiua::CodeSpan,
     uasm: &uiua::Assembly,
 ) -> Option<(Struct, HashSet<usize>)> {
     use uiua::LookupPreference::Function as FnLookup;
@@ -422,9 +423,9 @@ fn struct_from_module(
             .try_fold(
                 (Vec::new(), HashSet::new()),
                 |(mut field_vec, mut ignored), field_and_ignored| {
-                    let (ignoreidx, field) = field_and_ignored?;
-                    field_vec.push(field);
-                    ignored.insert(ignoreidx);
+                    let (accessor_idx, (fieldname, fieldtype)) = field_and_ignored?;
+                    field_vec.push((fieldname, fieldtype, uasm.bindings[accessor_idx].span.clone()));
+                    ignored.insert(accessor_idx);
                     Some((field_vec, ignored))
                 },
             )
@@ -438,6 +439,7 @@ fn struct_from_module(
             Struct {
                 name: name.into(),
                 fields,
+                span,
             },
             ignored_bindings,
         ))
@@ -449,6 +451,7 @@ fn struct_from_module(
 fn enum_from_module(
     name: &str,
     module: &uiua::Module,
+    span: uiua::CodeSpan,
     uasm: &uiua::Assembly,
 ) -> Option<(Enum, HashSet<usize>)> {
     if let Some(variants) = get_string_array_member("Variants", module, uasm)
@@ -457,9 +460,12 @@ fn enum_from_module(
             .map(|v| {
                 get_module_item_index(v, module, uiua::LookupPreference::Module, uasm).and_then(
                     |idx| match &uasm.bindings[idx].kind {
-                        uiua::BindingKind::Module(variant_module) => {
-                            struct_from_module(v, variant_module, uasm)
-                        }
+                        uiua::BindingKind::Module(variant_module) => struct_from_module(
+                            v,
+                            variant_module,
+                            uasm.bindings[idx].span.clone(),
+                            uasm,
+                        ),
                         _ => None,
                     },
                 )
@@ -478,6 +484,7 @@ fn enum_from_module(
             Enum {
                 name: name.into(),
                 variants: structs,
+                span,
             },
             ignored_bindings,
         ))
@@ -494,10 +501,20 @@ fn collect_structs_and_enums(uasm: &uiua::Assembly, uir: &mut Uir) -> HashSet<us
 
     for (exp_name, exp_index) in &*uasm.exports {
         if let uiua::BindingKind::Module(module) = &uasm.bindings[*exp_index].kind {
-            if let Some((struct_def, ignored)) = struct_from_module(exp_name, module, uasm) {
+            if let Some((struct_def, ignored)) = struct_from_module(
+                exp_name,
+                module,
+                uasm.bindings[*exp_index].span.clone(),
+                uasm,
+            ) {
                 uir.structs.push(struct_def);
                 ignored_bindings.extend(&ignored);
-            } else if let Some((enum_def, ignored)) = enum_from_module(exp_name, module, uasm) {
+            } else if let Some((enum_def, ignored)) = enum_from_module(
+                exp_name,
+                module,
+                uasm.bindings[*exp_index].span.clone(),
+                uasm,
+            ) {
                 uir.enums.push(enum_def);
                 ignored_bindings.extend(&ignored);
             }
