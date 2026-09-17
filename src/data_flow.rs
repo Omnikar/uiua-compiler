@@ -404,31 +404,43 @@ fn struct_from_module(
     module: &uiua::Module,
     uasm: &uiua::Assembly,
 ) -> Option<(Struct, HashSet<usize>)> {
-    let mut ignored_bindings: HashSet<usize> = HashSet::new();
-
     use uiua::LookupPreference::Function as FnLookup;
     if let Some(fields) = get_string_array_member("Fields", module, uasm)
         && let Some(type_const_index) = get_module_item_index("t", module, FnLookup, uasm)
         // Extract box array from binding
         && let uiua::BindingKind::Const(Some(uiua::Value::Box(type_array))) =
             &uasm.bindings[type_const_index].kind
+        && let Some((fields, mut ignored_bindings)) = fields
+            .into_iter()
+            .zip(type_array.elements())
+            .map(|(field, elem_type)| {
+                Some((
+                    get_module_item_index(&field, module, FnLookup, uasm)?,
+                    (field, uiua::Type::from_spec(elem_type.as_ref())?),
+                ))
+            })
+            .try_fold(
+                (Vec::new(), HashSet::new()),
+                |(mut field_vec, mut ignored), field_and_ignored| {
+                    let (ignoreidx, field) = field_and_ignored?;
+                    field_vec.push(field);
+                    ignored.insert(ignoreidx);
+                    Some((field_vec, ignored))
+                },
+            )
     {
         ignored_bindings.extend(
             ["New", "NoInit"]
                 .into_iter()
                 .filter_map(|name| get_module_item_index(name, module, FnLookup, uasm)),
         );
-        let mut struct_def = Struct {
-            name: name.into(),
-            fields: Vec::new(),
-        };
-        for (field, elem_type) in fields.into_iter().zip(type_array.elements()) {
-            ignored_bindings.insert(get_module_item_index(&field, module, FnLookup, uasm).unwrap());
-            struct_def
-                .fields
-                .push((field, uiua::Type::from_spec(elem_type.as_ref()).unwrap()));
-        }
-        Some((struct_def, ignored_bindings))
+        Some((
+            Struct {
+                name: name.into(),
+                fields,
+            },
+            ignored_bindings,
+        ))
     } else {
         None
     }
