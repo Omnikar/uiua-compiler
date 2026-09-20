@@ -282,9 +282,6 @@ impl TryFrom<&uiua::Value> for ValueInfo {
                 uiua::Value::Complex(_array) => {
                     unimplemented!("Complex numbers are currently not supported")
                 }
-                uiua::Value::Mv(_array) => {
-                    unimplemented!("Multivectors are currently not supported")
-                }
             })
         } else {
             let shape = value.shape.iter().copied().collect_vec();
