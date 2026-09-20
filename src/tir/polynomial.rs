@@ -8,6 +8,10 @@ use std::rc::Rc;
 ///
 /// The polynomial is represented as a hashmap from exponent values to coefficients. For example, an entry of `[1, 2] -> 3` represents the term `3x₀x₁²` in the polynomial.
 /// No stored coefficients should be zero, and no exponent lists should have trailing zeros.
+#[expect(
+    clippy::unsafe_derive_deserialize,
+    reason = "We are deriving from the FromStr implementation, so `unsafe` is not an issue. This seems to be a false positive on Clippy's end."
+)]
 #[derive(Clone, Debug, PartialEq, Eq, SerializeDisplay, DeserializeFromStr)]
 pub struct Expr {
     terms: HashMap<Rc<[u32]>, isize>,

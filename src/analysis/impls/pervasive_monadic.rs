@@ -1,5 +1,4 @@
-#![allow(clippy::cast_precision_loss)]
-#![allow(clippy::cast_possible_truncation)]
+#![expect(clippy::cast_possible_truncation)]
 
 use super::{AnalyzeContext, Error, ErrorKind, ValueInfo, types};
 use types::ScalarInfo as S;

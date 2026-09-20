@@ -1,4 +1,4 @@
-#![allow(clippy::cast_precision_loss, clippy::float_cmp)]
+#![expect(clippy::float_cmp)]
 
 use itertools::Itertools;
 
@@ -336,7 +336,7 @@ fn try_match_shapes<'a>(
 }
 
 /// Must only be invoked after calling `try_match_shapes`
-#[allow(clippy::too_many_lines)]
+#[expect(clippy::too_many_lines)]
 fn pervasive_dyadic_rec(
     lhs_info: &ValueInfo,
     rhs_info: &ValueInfo,

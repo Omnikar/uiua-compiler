@@ -217,7 +217,7 @@ impl ValueInfo {
                         Self::Scalar(S::Int(b.map(i64::from), false))
                             .supertype(&Self::Scalar(*other))
                     }
-                    #[allow(clippy::cast_precision_loss, clippy::float_cmp)]
+                    #[expect(clippy::float_cmp)]
                     (S::Int(i, inf), S::Float(f)) | (S::Float(f), S::Int(i, inf)) => {
                         Some(Self::Scalar(S::Float(
                             S::int_to_float(*i, *inf).and_then(|i| f.filter(|f| i == *f)),
@@ -268,7 +268,7 @@ pub mod types {
             }
         }
 
-        #[allow(clippy::cast_precision_loss)]
+        #[expect(clippy::cast_precision_loss)]
         pub fn int_to_float(val: Option<i64>, maybe_inf: bool) -> Option<f64> {
             val.map(|val| {
                 if maybe_inf && val == i64::MAX {
@@ -281,7 +281,7 @@ pub mod types {
             })
         }
 
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(clippy::cast_possible_truncation)]
         pub fn float_to_int(val: Option<f64>) -> (Option<i64>, bool) {
             let int_val = val.map(|val| {
                 let int_val = val as i64;
@@ -385,7 +385,7 @@ pub mod types {
             format!("{shape_s}array of {element_type_s}").into()
         }
 
-        #[allow(
+        #[expect(
             clippy::too_many_lines,
             reason = "This function is one big `match` expression that it doesn't seem can be split up very ergonomically."
         )]

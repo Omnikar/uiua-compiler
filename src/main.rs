@@ -1,8 +1,7 @@
-#![warn(clippy::pedantic)]
-#![allow(
+#![warn(clippy::pedantic, clippy::allow_attributes)]
+#![expect(
     clippy::items_after_statements,
     clippy::match_wildcard_for_single_variants,
-    clippy::zero_sized_map_values,
     clippy::needless_pass_by_value
 )]
 

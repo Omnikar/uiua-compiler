@@ -261,7 +261,7 @@ impl TryFrom<&uiua::Value> for ValueInfo {
                     b @ (0.0 | 1.0) => types::ScalarInfo::Bool(Some(b != 0.0)),
                     f => {
                         if f.fract() == 0.0 && f.is_finite() && f.abs() < 2.0f64.powi(53) {
-                            #[allow(clippy::cast_possible_truncation)]
+                            #[expect(clippy::cast_possible_truncation)]
                             types::ScalarInfo::Int(Some(f as i64), false)
                         } else if f == f64::INFINITY {
                             types::ScalarInfo::Int(Some(i64::MAX), true)

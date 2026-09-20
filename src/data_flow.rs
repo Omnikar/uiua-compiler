@@ -130,7 +130,7 @@ fn simulate_data_flow(uiua_node: &uiua::Node) -> Result<Function, Error> {
     })
 }
 
-#[allow(
+#[expect(
     clippy::too_many_lines,
     reason = "This function comprises one giant `match` block for handling stack manipulation"
 )]

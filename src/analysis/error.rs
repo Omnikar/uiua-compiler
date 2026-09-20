@@ -210,7 +210,7 @@ fn color_from_hsl(hue: f32, saturation: f32, lightness: f32) -> Color {
         _ => unreachable!(),
     };
 
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let [r, g, b] = components.map(|v| f32::round((v + lightness_match) * 255.0) as u8);
 
     Color::Rgb(r, g, b)
