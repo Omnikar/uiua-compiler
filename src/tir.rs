@@ -96,7 +96,7 @@ pub enum Node {
     FuncPrim(Prim),
     TirOp(TirOp),
     ModPrim(Prim, Vec<Function>),
-    // Call(…),
+    Call(usize),
     // ...
 }
 impl crate::generic_ir::FunctionNode for Node {
@@ -139,7 +139,7 @@ pub fn demote_known_shape(known_shape: &[usize]) -> Vec<Expr> {
     known_shape.iter().copied().map(Expr::from).collect()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ValueInfo {
     Scalar(types::ScalarInfo),
     Array(Box<types::ArrayInfo>),
@@ -233,6 +233,80 @@ impl ValueInfo {
             _ => None,
         }
     }
+
+    pub fn is_supertype_of(&self, rhs: &Self) -> bool {
+        self.supertype(rhs).is_some_and(|styp| &styp == self)
+    }
+
+    /// Create a supertype to use to annotate function calls
+    ///
+    /// Returns `None` if the input is an unranked array.
+    pub fn func_supertype(&self) -> Option<Self> {
+        Some(match self {
+            Self::Scalar(scalar_info) => Self::Scalar(match scalar_info {
+                types::ScalarInfo::Bool(_) => types::ScalarInfo::Bool(None),
+                types::ScalarInfo::Int(_, inf) => types::ScalarInfo::Int(None, *inf),
+                types::ScalarInfo::Float(_) => types::ScalarInfo::Float(None),
+                types::ScalarInfo::Char(_) => types::ScalarInfo::Char(None),
+            }),
+            Self::Array(array_info) => Self::Array(Box::new(match &**array_info {
+                types::ArrayInfo::Known {
+                    element_type,
+                    value,
+                } => types::ArrayInfo::Ranked {
+                    element_type: element_type.func_supertype()?,
+                    shape: value.shape.iter().copied().map(Into::into).collect(),
+                },
+                types::ArrayInfo::Ranked {
+                    element_type,
+                    shape,
+                } => types::ArrayInfo::Ranked {
+                    element_type: element_type.func_supertype()?,
+                    shape: shape
+                        .iter()
+                        .map(|ax| {
+                            // Repalce all unknown axes with brand new variables
+                            if ax.as_const().is_some() {
+                                ax.clone()
+                            } else {
+                                Expr::new_var()
+                            }
+                        })
+                        .collect(),
+                },
+                types::ArrayInfo::Unranked { .. } => return None,
+            })),
+            Self::Map(map_info) => Self::Map(Box::new(types::MapInfo {
+                key_type: map_info.key_type.func_supertype()?,
+                value_type: map_info.value_type.func_supertype()?,
+            })),
+            Self::Struct(struct_info) => Self::Struct(types::StructInfo {
+                fields: struct_info
+                    .fields
+                    .iter()
+                    .map(|(name, typ)| Some((name.clone(), typ.func_supertype()?)))
+                    .collect::<Option<_>>()?,
+            }),
+            Self::Enum(enum_info) => Self::Enum(types::EnumInfo {
+                variants: enum_info
+                    .variants
+                    .iter()
+                    .map(|(name, struct_info)| {
+                        Some((
+                            name.clone(),
+                            types::StructInfo {
+                                fields: struct_info
+                                    .fields
+                                    .iter()
+                                    .map(|(name, typ)| Some((name.clone(), typ.func_supertype()?)))
+                                    .collect::<Option<_>>()?,
+                            },
+                        ))
+                    })
+                    .collect::<Option<_>>()?,
+            }),
+        })
+    }
 }
 
 pub mod types {
@@ -243,7 +317,7 @@ pub mod types {
     use super::{SymShape, ValueInfo};
     use crate::tir::polynomial::Expr;
 
-    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
     pub enum ScalarInfo {
         Bool(Option<bool>),
         /// Bool stores whether this represents integer-or-infinity
@@ -310,13 +384,13 @@ pub mod types {
         }
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct ArrayValue {
         pub shape: Vec<usize>,
         pub data: Vec<ValueInfo>,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub enum ArrayInfo {
         /// Exact value known at compile time
         Known {
@@ -506,7 +580,7 @@ pub mod types {
         }
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct MapInfo {
         pub key_type: ValueInfo,
         pub value_type: ValueInfo,
@@ -523,12 +597,12 @@ pub mod types {
         }
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct StructInfo {
         pub fields: Rc<[(String, ValueInfo)]>,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct EnumInfo {
         pub variants: Rc<[(String, StructInfo)]>,
     }
