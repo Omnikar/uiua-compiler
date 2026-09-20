@@ -256,6 +256,7 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
         }
         uir::Node::Call(uiua_func) => {
             // TODO: Inlining?
+            // TODO: Recursion?
 
             let uir_binding = tr
                 .uir
@@ -266,23 +267,38 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
                 .unwrap();
             let uir_func = &uir_binding.func;
 
+            let mut substs = Vec::new();
+
             let mut tir = tr.tir.borrow();
             let (i, binding) = if let Some((i, binding)) =
                 tir.bindings.iter().enumerate().find(|(_, binding)| {
                     uiua_func.hash() == binding.hash
                         && inputs.len() == binding.func.meta.inputs.len()
                         && tr.infos_dyn(&inputs).zip(&binding.func.meta.inputs).all(
-                            |(input_info, func_input_info)| {
-                                func_input_info.is_supertype_of(input_info)
+                            |(input_info, func_input_info)| match input_info
+                                .match_monomorphization(func_input_info)
+                            {
+                                Some(new_substs) => {
+                                    substs.extend(new_substs);
+                                    true
+                                }
+                                None => false,
                             },
                         )
                 }) {
                 (i, binding)
             } else {
                 drop(tir);
-                let func_input_infos = tr
-                    .infos_dyn(&inputs)
-                    .map(ValueInfo::func_supertype)
+                let input_infos = tr.infos_dyn(&inputs).collect_vec();
+                let func_input_infos = input_infos
+                    .iter()
+                    .copied()
+                    .map(|val| {
+                        val.func_supertype().map(|(styp, new_substs)| {
+                            substs.extend(new_substs);
+                            styp
+                        })
+                    })
                     .collect::<Option<Vec<_>>>()
                     .ok_or_else(|| ctx.make_error(ErrorKind::Unranked("function call")))?;
                 let tir_func =

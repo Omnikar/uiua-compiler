@@ -47,6 +47,31 @@ impl Expr {
             _ => None,
         }
     }
+
+    /// If this expression is a single variable with coefficient 1, return its variable index
+    pub fn as_single_var(&self) -> Option<usize> {
+        debug_assert!(self.terms.values().all(|coef| *coef != 0));
+        if self.terms.len() != 1 {
+            return None;
+        }
+        let (exps, &coef) = self.terms.iter().next().unwrap();
+        if coef != 1 {
+            return None;
+        }
+        let mut idx = None;
+        for (exp_i, &exp) in exps.iter().enumerate() {
+            if exp == 0 {
+            } else if exp == 1 {
+                if idx.is_some() {
+                    return None;
+                }
+                idx = Some(exp_i);
+            } else {
+                return None;
+            }
+        }
+        idx
+    }
 }
 
 impl From<isize> for Expr {
