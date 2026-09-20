@@ -103,7 +103,7 @@ impl AnalyzeContext<'_> {
 
 pub fn construct_tir(uir: &uir::Uir) -> Result<tir::Tir, Error> {
     let mut tir = RefCell::new(tir::Tir {
-        structs: Vec::new(),
+        structs: uir.structs.iter().map(Into::<tir::Struct>::into).collect(),
         enums: Vec::new(),
         bindings: Vec::new(),
         main: None,
