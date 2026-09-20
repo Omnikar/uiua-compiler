@@ -268,6 +268,7 @@ pub mod types {
             }
         }
 
+        #[allow(clippy::cast_precision_loss)]
         pub fn int_to_float(val: Option<i64>, maybe_inf: bool) -> Option<f64> {
             val.map(|val| {
                 if maybe_inf && val == i64::MAX {
@@ -280,6 +281,7 @@ pub mod types {
             })
         }
 
+        #[allow(clippy::cast_possible_truncation)]
         pub fn float_to_int(val: Option<f64>) -> (Option<i64>, bool) {
             let int_val = val.map(|val| {
                 let int_val = val as i64;
@@ -289,7 +291,7 @@ pub mod types {
                     int_val
                 }
             });
-            let maybe_inf = val.is_none_or(|val| val.is_infinite());
+            let maybe_inf = val.is_none_or(f64::is_infinite);
             (int_val, maybe_inf)
         }
 
