@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::str::FromStr;
 
 use polynomial::Expr;
 
@@ -39,21 +40,7 @@ pub struct Binding {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Struct {
     pub name: String,
-    pub info: types::StructInfo,
-}
-impl From<&crate::uir::Struct> for Struct {
-    fn from(uir_struct: &crate::uir::Struct) -> Self {
-        let mut fields = Vec::new();
-        for (field_name, field_type, _field_span) in &uir_struct.fields {
-            fields.push((field_name.clone(), ValueInfo::from(field_type.clone())));
-        }
-        Self {
-            name: uir_struct.name.clone(),
-            info: types::StructInfo {
-                fields: fields.into(),
-            },
-        }
-    }
+    pub info: types::BoundStructInfo,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,7 +145,7 @@ pub enum ValueInfo {
     Scalar(types::ScalarInfo),
     Array(Box<types::ArrayInfo>),
     Map(Box<types::MapInfo>),
-    Struct(types::StructInfo),
+    Struct(types::UnboundStructInfo),
     Enum(types::EnumInfo),
     // TODO: File handles, etc?
 }
@@ -187,7 +174,7 @@ impl ValueInfo {
             ValueInfo::Scalar(scalar) => scalar.type_name().into(),
             ValueInfo::Array(array) => array.type_name(),
             ValueInfo::Map(map) => map.type_name(),
-            ValueInfo::Struct(_) => todo!(),
+            ValueInfo::Struct(..) => todo!(),
             ValueInfo::Enum(_) => todo!(),
         }
     }
@@ -245,39 +232,6 @@ impl ValueInfo {
                 lhs.supertype(rhs).map(Box::new).map(Self::Array)
             }
             _ => None,
-        }
-    }
-}
-impl From<uiua::Type> for ValueInfo {
-    fn from(value: uiua::Type) -> Self {
-        if value.shape.is_scalar() {
-            value.scalar.into()
-        } else if value.shape.is_any() {
-            todo!()
-        } else {
-            ValueInfo::Array(Box::new(types::ArrayInfo::Ranked {
-                element_type: value.scalar.into(),
-                shape: value
-                    .shape
-                    .dims
-                    .into_iter()
-                    .map(Into::<Expr>::into)
-                    .collect(),
-            }))
-        }
-    }
-}
-impl From<uiua::Scalar> for ValueInfo {
-    fn from(value: uiua::Scalar) -> Self {
-        use uiua::Scalar as UType;
-        use uiua::ScalarBox as UBoxType;
-        match value {
-            UType::Bool => ValueInfo::Scalar(types::ScalarInfo::Bool(None)),
-            UType::Nat | UType::Int => ValueInfo::Scalar(types::ScalarInfo::Int(None)),
-            UType::Num => ValueInfo::Scalar(types::ScalarInfo::Float(None)),
-            UType::Ascii | UType::Char => ValueInfo::Scalar(types::ScalarInfo::Char(None)),
-            UType::Box(UBoxType::Def(..)) => todo!(),
-            _ => todo!(),
         }
     }
 }
@@ -571,12 +525,18 @@ pub mod types {
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct StructInfo {
+    pub struct BoundStructInfo {
         pub fields: Rc<[(String, ValueInfo)]>,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct UnboundStructInfo {
+        pub name: String,
+        pub fields: Rc<[ValueInfo]>,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct EnumInfo {
-        pub variants: Rc<[(String, StructInfo)]>,
+        pub variants: Rc<[(String, BoundStructInfo)]>,
     }
 }
