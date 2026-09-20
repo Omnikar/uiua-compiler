@@ -5,6 +5,7 @@ use derive_more::From;
 use elsa::map::FrozenMap;
 use itertools::Itertools;
 use petgraph::visit::EdgeRef;
+use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -51,19 +52,26 @@ impl FunctionTranslator<'_> {
         info: impl Into<tir::NodeMeta>,
         inputs: impl IntoIterator<Item = TirValue>,
     ) -> [(TirValue, &ValueInfo); N] {
+        self.add_node_dyn(node, info, inputs, N).try_into().unwrap()
+    }
+
+    fn add_node_dyn(
+        &self,
+        node: tir::Node,
+        info: impl Into<tir::NodeMeta>,
+        inputs: impl IntoIterator<Item = TirValue>,
+        n: usize,
+    ) -> Vec<(TirValue, &ValueInfo)> {
         let mut graph = self.tir_graph.borrow_mut();
         let node_idx = graph.add_node(node);
         self.info_map.insert(node_idx, info.into());
         for (in_i, input) in inputs.into_iter().enumerate() {
             graph.add_edge(node_idx, input.node_idx, (input.out_i, in_i));
         }
-        <[TirValue; N]>::try_from(
-            (0..N)
-                .map(|out_i| TirValue { node_idx, out_i })
-                .collect_vec(),
-        )
-        .unwrap()
-        .map(|val| (val, &self.info_map[&val.node_idx][val.out_i]))
+        (0..n)
+            .map(|out_i| TirValue { node_idx, out_i })
+            .map(|val| (val, &self.info_map[&val.node_idx][val.out_i]))
+            .collect()
     }
 
     fn associate(&self, from: impl Into<UirValue>, to: impl Into<TirValue>) {
@@ -77,6 +85,16 @@ impl FunctionTranslator<'_> {
 
     fn infos<const N: usize>(&self, values: [TirValue; N]) -> [&ValueInfo; N] {
         values.map(|val| &self.info_map[&val.node_idx][val.out_i])
+    }
+
+    fn infos_dyn(
+        &self,
+        values: impl IntoIterator<Item = impl Borrow<TirValue>>,
+    ) -> impl Iterator<Item = &ValueInfo> {
+        values.into_iter().map(|val| {
+            let val = val.borrow();
+            &self.info_map[&val.node_idx][val.out_i]
+        })
     }
 }
 
@@ -235,6 +253,61 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
             let [lhs, rhs] = inputs.try_into().unwrap();
             let output = impl_fn(lhs, rhs, tr, ctx)?;
             tr.associate((uir_node_idx, 0), output);
+        }
+        uir::Node::Call(uiua_func) => {
+            // TODO: Inlining?
+
+            let uir_binding = tr
+                .uir
+                .borrow()
+                .bindings
+                .iter()
+                .find(|binding| binding.func_id == uiua_func.id)
+                .unwrap();
+            let uir_func = &uir_binding.func;
+
+            let mut tir = tr.tir.borrow();
+            let (i, binding) = if let Some((i, binding)) =
+                tir.bindings.iter().enumerate().find(|(_, binding)| {
+                    uiua_func.hash() == binding.hash
+                        && inputs.len() == binding.func.meta.inputs.len()
+                        && tr.infos_dyn(&inputs).zip(&binding.func.meta.inputs).all(
+                            |(input_info, func_input_info)| {
+                                func_input_info.is_supertype_of(input_info)
+                            },
+                        )
+                }) {
+                (i, binding)
+            } else {
+                drop(tir);
+                let func_input_infos = tr
+                    .infos_dyn(&inputs)
+                    .map(ValueInfo::func_supertype)
+                    .collect::<Option<Vec<_>>>()
+                    .ok_or_else(|| ctx.make_error(ErrorKind::Unranked("function call")))?;
+                let tir_func =
+                    monomorphize_and_analyze(uir_func, func_input_infos, tr.uir, tr.tir)?;
+                tr.tir.borrow_mut().bindings.push(tir::Binding {
+                    span: uir_binding.span.clone(),
+                    func_id: uir_binding.func_id.clone(),
+                    hash: uir_binding.hash,
+                    func: tir_func,
+                });
+                tir = tr.tir.borrow();
+                (tir.bindings.len() - 1, tir.bindings.last().unwrap())
+            };
+
+            let outs_count = binding.func.outs_count();
+            let outputs = tr.add_node_dyn(
+                tir::Node::Call(i),
+                // TODO: Do substitutions and stuff to get a more granular output for this
+                binding.func.meta.outputs.clone(),
+                inputs,
+                outs_count,
+            );
+            for (i, (out, _)) in outputs.into_iter().enumerate() {
+                tr.associate((uir_node_idx, i), out);
+            }
         }
         _ => todo!("{uir_node:?}"),
     }
