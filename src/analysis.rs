@@ -255,14 +255,18 @@ impl TryFrom<&uiua::Value> for ValueInfo {
             Self::Scalar(match value {
                 uiua::Value::Byte(array) => match *array.elements().next().unwrap() {
                     b @ (0 | 1) => types::ScalarInfo::Bool(Some(b != 0)),
-                    i => types::ScalarInfo::Int(Some(i.into())),
+                    i => types::ScalarInfo::Int(Some(i.into()), false),
                 },
                 uiua::Value::Num(array) => match *array.elements().next().unwrap() {
                     b @ (0.0 | 1.0) => types::ScalarInfo::Bool(Some(b != 0.0)),
                     f => {
                         if f.fract() == 0.0 && f.is_finite() && f.abs() < 2.0f64.powi(53) {
                             #[allow(clippy::cast_possible_truncation)]
-                            types::ScalarInfo::Int(Some(f as i64))
+                            types::ScalarInfo::Int(Some(f as i64), false)
+                        } else if f == f64::INFINITY {
+                            types::ScalarInfo::Int(Some(i64::MAX), true)
+                        } else if f == f64::NEG_INFINITY {
+                            types::ScalarInfo::Int(Some(i64::MIN + 1), true)
                         } else {
                             types::ScalarInfo::Float(Some(f))
                         }

@@ -198,22 +198,31 @@ impl ValueInfo {
         match (self, rhs) {
             (Self::Scalar(lhs), Self::Scalar(rhs)) => {
                 use types::ScalarInfo as S;
-                if let Some(st) =
-                    scalar_supertype_ident!(lhs, rhs; S::Bool, S::Int, S::Float, S::Char)
-                {
+                if let Some(st) = scalar_supertype_ident!(lhs, rhs; S::Bool, S::Float, S::Char) {
                     return Some(Self::Scalar(st));
+                } else if let (S::Int(l, linf), S::Int(r, rinf)) = (lhs, rhs) {
+                    return Some(Self::Scalar(S::Int(
+                        if l == r { *l } else { None },
+                        *linf || *rinf,
+                    )));
                 }
                 match (lhs, rhs) {
-                    (S::Bool(b), S::Int(i)) | (S::Int(i), S::Bool(b)) => Some(Self::Scalar(
-                        S::Int(b.map(i64::from).and_then(|b| i.filter(|i| b == *i))),
-                    )),
+                    (S::Bool(b), S::Int(i, inf)) | (S::Int(i, inf), S::Bool(b)) => {
+                        Some(Self::Scalar(S::Int(
+                            b.map(i64::from).and_then(|b| i.filter(|i| b == *i)),
+                            *inf,
+                        )))
+                    }
                     (S::Bool(b), other) | (other, S::Bool(b)) => {
-                        Self::Scalar(S::Int(b.map(i64::from))).supertype(&Self::Scalar(*other))
+                        Self::Scalar(S::Int(b.map(i64::from), false))
+                            .supertype(&Self::Scalar(*other))
                     }
                     #[allow(clippy::cast_precision_loss, clippy::float_cmp)]
-                    (S::Int(i), S::Float(f)) | (S::Float(f), S::Int(i)) => Some(Self::Scalar(
-                        S::Float(i.map(|i| i as f64).and_then(|i| f.filter(|f| i == *f))),
-                    )),
+                    (S::Int(i, inf), S::Float(f)) | (S::Float(f), S::Int(i, inf)) => {
+                        Some(Self::Scalar(S::Float(
+                            S::int_to_float(*i, *inf).and_then(|i| f.filter(|f| i == *f)),
+                        )))
+                    }
                     _ => None,
                 }
             }
@@ -237,7 +246,8 @@ pub mod types {
     #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
     pub enum ScalarInfo {
         Bool(Option<bool>),
-        Int(Option<i64>),
+        /// Bool stores whether this represents integer-or-infinity
+        Int(Option<i64>, bool),
         Float(Option<f64>),
         Char(Option<char>),
     }
@@ -246,10 +256,55 @@ pub mod types {
         pub fn type_name(&self) -> &'static str {
             match self {
                 ScalarInfo::Bool(_) => "boolean",
-                ScalarInfo::Int(_) => "integer",
+                ScalarInfo::Int(_, maybe_inf) => {
+                    if *maybe_inf {
+                        "integer-or-infinity"
+                    } else {
+                        "integer"
+                    }
+                }
                 ScalarInfo::Float(_) => "float",
                 ScalarInfo::Char(_) => "character",
             }
+        }
+
+        pub fn int_to_float(val: Option<i64>, maybe_inf: bool) -> Option<f64> {
+            val.map(|val| {
+                if maybe_inf && val == i64::MAX {
+                    f64::INFINITY
+                } else if maybe_inf && val == i64::MIN + 1 {
+                    f64::NEG_INFINITY
+                } else {
+                    val as f64
+                }
+            })
+        }
+
+        pub fn float_to_int(val: Option<f64>) -> (Option<i64>, bool) {
+            let int_val = val.map(|val| {
+                let int_val = val as i64;
+                if val == f64::NEG_INFINITY {
+                    int_val + 1
+                } else {
+                    int_val
+                }
+            });
+            let maybe_inf = val.is_none_or(|val| val.is_infinite());
+            (int_val, maybe_inf)
+        }
+
+        pub fn map_inf(
+            val: Option<i64>,
+            maybe_inf: bool,
+            f: impl FnOnce(i64) -> i64,
+        ) -> Option<i64> {
+            val.map(|val| {
+                if maybe_inf && (val == i64::MIN + 1 || val == i64::MAX) {
+                    val
+                } else {
+                    f(val)
+                }
+            })
         }
     }
 

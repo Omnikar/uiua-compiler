@@ -38,15 +38,23 @@ fn try_match_scalar_types(lhs: types::ScalarInfo, rhs: types::ScalarInfo) -> Sca
     use types::ScalarInfo as S;
     match (lhs, rhs) {
         (S::Bool(_), S::Bool(_))
-        | (S::Int(_), S::Int(_))
+        | (S::Int(_, _), S::Int(_, _))
         | (S::Float(_), S::Float(_))
         | (S::Char(_), S::Char(_)) => Stm::Identical,
-        (S::Bool(l), S::Int(_)) => Stm::Matching(Left, S::Bool(l), S::Int(l.map(i64::from))),
+        (S::Bool(l), S::Int(_, inf)) => {
+            Stm::Matching(Left, S::Bool(l), S::Int(l.map(i64::from), inf))
+        }
         (S::Bool(l), S::Float(_)) => Stm::Matching(Left, S::Bool(l), S::Float(l.map(f64::from))),
-        (S::Int(_), S::Bool(r)) => Stm::Matching(Right, S::Bool(r), S::Int(r.map(i64::from))),
-        (S::Int(l), S::Float(_)) => Stm::Matching(Left, S::Int(l), S::Float(l.map(|l| l as f64))),
+        (S::Int(_, inf), S::Bool(r)) => {
+            Stm::Matching(Right, S::Bool(r), S::Int(r.map(i64::from), inf))
+        }
+        (S::Int(l, inf), S::Float(_)) => {
+            Stm::Matching(Left, S::Int(l, inf), S::Float(l.map(|l| l as f64)))
+        }
         (S::Float(_), S::Bool(r)) => Stm::Matching(Right, S::Bool(r), S::Float(r.map(f64::from))),
-        (S::Float(_), S::Int(r)) => Stm::Matching(Right, S::Int(r), S::Float(r.map(|r| r as f64))),
+        (S::Float(_), S::Int(r, inf)) => {
+            Stm::Matching(Right, S::Int(r, inf), S::Float(r.map(|r| r as f64)))
+        }
         _ => Stm::Mismatched,
     }
 }
@@ -520,7 +528,7 @@ macro_rules! matching_type_func {
 matching_type_func! {
     equals, "equals", Pr::Eq;
     (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
-    (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
+    (S::Int(l, _), S::Int(r, _)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
     (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
     (S::Char(l), S::Char(r)) => S::Bool(l.zip(r).map(|(l, r)| l == r)),
 }
@@ -528,7 +536,7 @@ matching_type_func! {
 matching_type_func! {
     not_equals, "not equals", Pr::Ne;
     (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| l != r)),
-    (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l != r)),
+    (S::Int(l, _), S::Int(r, _)) => S::Bool(l.zip(r).map(|(l, r)| l != r)),
     (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l != r)),
     (S::Char(l), S::Char(r)) => S::Bool(l.zip(r).map(|(l, r)| l != r)),
 }
@@ -537,7 +545,7 @@ matching_type_func! {
     less_than, "less than", Pr::Lt;
     // TODO: Optimize this branch to return known output even with one input unknown when possible
     (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| l && !r)),
-    (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l > r)),
+    (S::Int(l, _), S::Int(r, _)) => S::Bool(l.zip(r).map(|(l, r)| l > r)),
     (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l > r)),
     (S::Char(l), S::Char(r)) => S::Bool(l.zip(r).map(|(l, r)| l > r)),
 }
@@ -546,7 +554,7 @@ matching_type_func! {
     less_or_equal, "less or equal", Pr::Le;
     // TODO: Optimize this branch to return known output even with one input unknown when possible
     (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| l || !r)),
-    (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l >= r)),
+    (S::Int(l, _), S::Int(r, _)) => S::Bool(l.zip(r).map(|(l, r)| l >= r)),
     (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l >= r)),
     (S::Char(l), S::Char(r)) => S::Bool(l.zip(r).map(|(l, r)| l >= r)),
 }
@@ -555,7 +563,7 @@ matching_type_func! {
     greater_than, "greater than", Pr::Gt;
     // TODO: Optimize this branch to return known output even with one input unknown when possible
     (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| !l && r)),
-    (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l < r)),
+    (S::Int(l, _), S::Int(r, _)) => S::Bool(l.zip(r).map(|(l, r)| l < r)),
     (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l < r)),
     (S::Char(l), S::Char(r)) => S::Bool(l.zip(r).map(|(l, r)| l < r)),
 }
@@ -564,7 +572,7 @@ matching_type_func! {
     greater_or_equal, "greater or equal", Pr::Ge;
     // TODO: Optimize this branch to return known output even with one input unknown when possible
     (S::Bool(l), S::Bool(r)) => S::Bool(l.zip(r).map(|(l, r)| !l || r)),
-    (S::Int(l), S::Int(r)) => S::Bool(l.zip(r).map(|(l, r)| l <= r)),
+    (S::Int(l, _), S::Int(r, _)) => S::Bool(l.zip(r).map(|(l, r)| l <= r)),
     (S::Float(l), S::Float(r)) => S::Bool(l.zip(r).map(|(l, r)| l <= r)),
     (S::Char(l), S::Char(r)) => S::Bool(l.zip(r).map(|(l, r)| l <= r)),
 }

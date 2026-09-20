@@ -70,7 +70,7 @@ fn float_func(
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
             S::Bool(b) => S::Float(b.map(|b| func(f64::from(b)))),
-            S::Int(i) => S::Float(i.map(|i| func(i as f64))),
+            S::Int(i, inf) => S::Float(S::int_to_float(i, inf)),
             S::Float(f) => S::Float(f.map(func)),
             S::Char(_) => ctx.error(error())?,
         })
@@ -81,7 +81,7 @@ pub fn not(input_info: &ValueInfo, ctx: AnalyzeContext) -> Result<ValueInfo, Err
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
             S::Bool(b) => S::Bool(b.map(|b| !b)),
-            S::Int(i) => S::Int(i.map(|i| 1 - i)),
+            S::Int(i, inf) => S::Int(S::map_inf(i, inf, |i| 1 - i), inf),
             S::Float(f) => S::Float(f.map(|f| 1.0 - f)),
             S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("not", input_info.type_name()))?,
         })
@@ -92,11 +92,15 @@ pub fn sign(input_info: &ValueInfo, _ctx: AnalyzeContext) -> Result<ValueInfo, E
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
             S::Bool(_) => scalar,
-            S::Int(i) => S::Int(i.map(i64::signum)),
-            S::Float(f) => S::Int(f.map(|f| if f == 0.0 { 0 } else { f.signum() as i64 })),
-            S::Char(c) => {
-                S::Int(c.map(|c| i64::from(c.is_uppercase()) - i64::from(c.is_lowercase())))
-            }
+            S::Int(i, _) => S::Int(i.map(i64::signum), false),
+            S::Float(f) => S::Int(
+                f.map(|f| if f == 0.0 { 0 } else { f.signum() as i64 }),
+                false,
+            ),
+            S::Char(c) => S::Int(
+                c.map(|c| i64::from(c.is_uppercase()) - i64::from(c.is_lowercase())),
+                false,
+            ),
         })
     })
 }
@@ -104,8 +108,8 @@ pub fn sign(input_info: &ValueInfo, _ctx: AnalyzeContext) -> Result<ValueInfo, E
 pub fn negate(input_info: &ValueInfo, _ctx: AnalyzeContext) -> Result<ValueInfo, Error> {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
-            S::Bool(b) => S::Int(b.map(|b| -i64::from(b))),
-            S::Int(i) => S::Int(i.map(|i| -i)),
+            S::Bool(b) => S::Int(b.map(|b| -i64::from(b)), false),
+            S::Int(i, inf) => S::Int(i.map(|i| -i), inf),
             S::Float(f) => S::Float(f.map(|f| -f)),
             S::Char(c) => S::Char(c.map(|c| {
                 if c.is_uppercase()
@@ -130,7 +134,7 @@ pub fn absolute_value(input_info: &ValueInfo, _ctx: AnalyzeContext) -> Result<Va
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
             S::Bool(_) => scalar,
-            S::Int(i) => S::Int(i.map(i64::abs)),
+            S::Int(i, inf) => S::Int(i.map(i64::abs), inf),
             S::Float(f) => S::Float(f.map(f64::abs)),
             S::Char(c) => S::Char(c.map(|c| {
                 let mut upper = c.to_uppercase();
@@ -147,8 +151,11 @@ pub fn absolute_value(input_info: &ValueInfo, _ctx: AnalyzeContext) -> Result<Va
 pub fn floor(input_info: &ValueInfo, ctx: AnalyzeContext) -> Result<ValueInfo, Error> {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
-            S::Bool(_) | S::Int(_) => scalar,
-            S::Float(f) => S::Int(f.map(|f| f.floor() as i64)),
+            S::Bool(_) | S::Int(_, _) => scalar,
+            S::Float(f) => {
+                let (i, inf) = S::float_to_int(f.map(f64::floor));
+                S::Int(i, inf)
+            }
             S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("floor", input_info.type_name()))?,
         })
     })
@@ -157,8 +164,11 @@ pub fn floor(input_info: &ValueInfo, ctx: AnalyzeContext) -> Result<ValueInfo, E
 pub fn ceiling(input_info: &ValueInfo, ctx: AnalyzeContext) -> Result<ValueInfo, Error> {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
-            S::Bool(_) | S::Int(_) => scalar,
-            S::Float(f) => S::Int(f.map(|f| f.ceil() as i64)),
+            S::Bool(_) | S::Int(_, _) => scalar,
+            S::Float(f) => {
+                let (i, inf) = S::float_to_int(f.map(f64::ceil));
+                S::Int(i, inf)
+            }
             S::Char(_) => {
                 ctx.error(ErrorKind::ExpectedNumber("ceiling", input_info.type_name()))?
             }
@@ -169,8 +179,11 @@ pub fn ceiling(input_info: &ValueInfo, ctx: AnalyzeContext) -> Result<ValueInfo,
 pub fn round(input_info: &ValueInfo, ctx: AnalyzeContext) -> Result<ValueInfo, Error> {
     pervasive_monadic(input_info, |scalar| {
         Ok(match scalar {
-            S::Bool(_) | S::Int(_) => scalar,
-            S::Float(f) => S::Int(f.map(|f| f.round() as i64)),
+            S::Bool(_) | S::Int(_, _) => scalar,
+            S::Float(f) => {
+                let (i, inf) = S::float_to_int(f.map(f64::round));
+                S::Int(i, inf)
+            }
             S::Char(_) => ctx.error(ErrorKind::ExpectedNumber("round", input_info.type_name()))?,
         })
     })
