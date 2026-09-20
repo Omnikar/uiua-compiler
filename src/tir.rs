@@ -234,15 +234,94 @@ impl ValueInfo {
         }
     }
 
-    pub fn is_supertype_of(&self, rhs: &Self) -> bool {
-        self.supertype(rhs).is_some_and(|styp| &styp == self)
+    /// Attempt to match to a `ValueInfo` in the inputs of a monomorphization of a function
+    ///
+    /// If not matching, returns `None`.
+    /// If matching, returns `Some` with a list of variable substitutions to make
+    pub fn match_monomorphization(&self, func_input_info: &Self) -> Option<Vec<(usize, Expr)>> {
+        use types::ArrayInfo as Ai;
+        use types::ScalarInfo as S;
+        match (self, func_input_info) {
+            (Self::Scalar(this_val), Self::Scalar(func_val)) => match (this_val, func_val) {
+                (S::Bool(this_val), S::Bool(func_val)) => func_val
+                    .is_none_or(|func_val| this_val.is_some_and(|this_val| this_val == func_val)),
+                (S::Int(this_val, this_inf), S::Int(func_val, func_inf)) => {
+                    *func_inf
+                        || !*this_inf
+                            && func_val.is_none_or(|func_val| {
+                                this_val.is_some_and(|this_val| this_val == func_val)
+                            })
+                }
+                #[expect(clippy::float_cmp)]
+                (S::Float(this_val), S::Float(func_val)) => func_val
+                    .is_none_or(|func_val| this_val.is_some_and(|this_val| this_val == func_val)),
+                (S::Char(this_val), S::Char(func_val)) => func_val
+                    .is_none_or(|func_val| this_val.is_some_and(|this_val| this_val == func_val)),
+                _ => false,
+            }
+            .then_some(Vec::new()),
+            (Self::Array(this_val), Self::Array(func_val)) => match (&**this_val, &**func_val) {
+                (
+                    Ai::Known {
+                        element_type: this_element_type,
+                        value: this_value,
+                    },
+                    Ai::Ranked {
+                        element_type: func_element_type,
+                        shape: func_shape,
+                    },
+                ) => {
+                    if this_value.shape.len() != func_shape.len() {
+                        return None;
+                    }
+                    for (&this_ax, func_ax) in this_value.shape.iter().zip(func_shape) {
+                        if func_ax.as_const() != Some(this_ax.cast_signed()) {
+                            return None;
+                        }
+                    }
+                    this_element_type.match_monomorphization(func_element_type)
+                }
+                (
+                    Ai::Ranked {
+                        element_type: this_element_type,
+                        shape: this_shape,
+                    },
+                    Ai::Ranked {
+                        element_type: func_element_type,
+                        shape: func_shape,
+                    },
+                ) => {
+                    if this_shape.len() != func_shape.len() {
+                        return None;
+                    }
+                    let mut substs = this_element_type.match_monomorphization(func_element_type)?;
+                    for (this_ax, func_ax) in this_shape.iter().zip(func_shape) {
+                        if let Some((this_ax, func_ax)) = this_ax.as_const().zip(func_ax.as_const())
+                            && this_ax == func_ax
+                        {
+                            continue;
+                        }
+                        let var_i = func_ax.as_single_var()?;
+                        substs.push((var_i, this_ax.clone()));
+                    }
+                    Some(substs)
+                }
+                _ => None,
+            },
+            _ => None,
+        }
     }
 
     /// Create a supertype to use to annotate function calls
     ///
     /// Returns `None` if the input is an unranked array.
-    pub fn func_supertype(&self) -> Option<Self> {
-        Some(match self {
+    pub fn func_supertype(&self) -> Option<(Self, Vec<(usize, Expr)>)> {
+        let mut substs = Vec::new();
+        let mut add_substs = |(val, new_substs)| {
+            substs.extend(new_substs);
+            val
+        };
+        let supertype = match self {
             Self::Scalar(scalar_info) => Self::Scalar(match scalar_info {
                 types::ScalarInfo::Bool(_) => types::ScalarInfo::Bool(None),
                 types::ScalarInfo::Int(_, inf) => types::ScalarInfo::Int(None, *inf),
@@ -254,14 +333,14 @@ impl ValueInfo {
                     element_type,
                     value,
                 } => types::ArrayInfo::Ranked {
-                    element_type: element_type.func_supertype()?,
+                    element_type: add_substs(element_type.func_supertype()?),
                     shape: value.shape.iter().copied().map(Into::into).collect(),
                 },
                 types::ArrayInfo::Ranked {
                     element_type,
                     shape,
                 } => types::ArrayInfo::Ranked {
-                    element_type: element_type.func_supertype()?,
+                    element_type: add_substs(element_type.func_supertype()?),
                     shape: shape
                         .iter()
                         .map(|ax| {
@@ -277,14 +356,14 @@ impl ValueInfo {
                 types::ArrayInfo::Unranked { .. } => return None,
             })),
             Self::Map(map_info) => Self::Map(Box::new(types::MapInfo {
-                key_type: map_info.key_type.func_supertype()?,
-                value_type: map_info.value_type.func_supertype()?,
+                key_type: add_substs(map_info.key_type.func_supertype()?),
+                value_type: add_substs(map_info.value_type.func_supertype()?),
             })),
             Self::Struct(struct_info) => Self::Struct(types::StructInfo {
                 fields: struct_info
                     .fields
                     .iter()
-                    .map(|(name, typ)| Some((name.clone(), typ.func_supertype()?)))
+                    .map(|(name, typ)| Some((name.clone(), add_substs(typ.func_supertype()?))))
                     .collect::<Option<_>>()?,
             }),
             Self::Enum(enum_info) => Self::Enum(types::EnumInfo {
@@ -298,14 +377,17 @@ impl ValueInfo {
                                 fields: struct_info
                                     .fields
                                     .iter()
-                                    .map(|(name, typ)| Some((name.clone(), typ.func_supertype()?)))
+                                    .map(|(name, typ)| {
+                                        Some((name.clone(), add_substs(typ.func_supertype()?)))
+                                    })
                                     .collect::<Option<_>>()?,
                             },
                         ))
                     })
                     .collect::<Option<_>>()?,
             }),
-        })
+        };
+        Some((supertype, substs))
     }
 }
 
