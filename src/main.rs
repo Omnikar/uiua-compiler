@@ -21,7 +21,7 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(about = "Uiua native compiler")]
 struct Args {
-    #[arg(help = "Input file path, - for stdin")]
+    #[arg(help = "Input file path (- for stdin)")]
     filepath: String,
     #[arg(short, help = "Output file path")]
     output: Option<String>,
