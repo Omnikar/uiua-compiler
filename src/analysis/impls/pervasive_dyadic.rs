@@ -49,11 +49,11 @@ fn try_match_scalar_types(lhs: types::ScalarInfo, rhs: types::ScalarInfo) -> Sca
             Stm::Matching(Right, S::Bool(r), S::Int(r.map(i64::from), inf))
         }
         (S::Int(l, inf), S::Float(_)) => {
-            Stm::Matching(Left, S::Int(l, inf), S::Float(l.map(|l| l as f64)))
+            Stm::Matching(Left, S::Int(l, inf), S::Float(S::int_to_float(l, inf)))
         }
         (S::Float(_), S::Bool(r)) => Stm::Matching(Right, S::Bool(r), S::Float(r.map(f64::from))),
         (S::Float(_), S::Int(r, inf)) => {
-            Stm::Matching(Right, S::Int(r, inf), S::Float(r.map(|r| r as f64)))
+            Stm::Matching(Right, S::Int(r, inf), S::Float(S::int_to_float(r, inf)))
         }
         _ => Stm::Mismatched,
     }
