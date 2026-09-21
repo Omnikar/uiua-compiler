@@ -273,7 +273,7 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
             tr.associate((uir_node_idx, 0), output);
         }
         uir::Node::Call(uiua_func) => {
-            translate_function_call(uiua_func, &inputs, ctx, uir_node_idx, &tr)?;
+            translate_function_call(uiua_func, &inputs, ctx, uir_node_idx, tr)?;
         }
         _ => todo!("{uir_node:?}"),
     }
