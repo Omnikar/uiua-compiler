@@ -344,7 +344,7 @@ impl ValueInfo {
                     shape: shape
                         .iter()
                         .map(|ax| {
-                            // Repalce all unknown axes with brand new variables
+                            // Replace all unknown axes with brand new variables
                             if ax.as_const().is_some() {
                                 ax.clone()
                             } else {
