@@ -125,6 +125,7 @@ impl AnalyzeContext<'_> {
             files: Rc::clone(&self.tr.uir.files),
             span: self.span.clone(),
             input_spans: self.input_spans.iter().map(|&x| x.clone()).collect(),
+            call_spans: Vec::new(),
             kind,
         }))
     }
@@ -329,7 +330,12 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
                     tr.uir,
                     tr.tir,
                     ctx.input_spans,
-                )?;
+                )
+                .map_err(|mut err| {
+                    let Error::FancyError(fancy_err) = &mut err;
+                    fancy_err.call_spans.push(span.clone());
+                    err
+                })?;
                 tr.tir.borrow_mut().bindings.push(tir::Binding {
                     span: uir_binding.span.clone(),
                     func_id: uir_binding.func_id.clone(),

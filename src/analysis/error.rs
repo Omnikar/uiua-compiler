@@ -15,6 +15,7 @@ pub struct FancyError {
     pub files: Rc<HashMap<PathBuf, String>>,
     pub span: uiua::Span,
     pub input_spans: Vec<uiua::Span>,
+    pub call_spans: Vec<uiua::Span>,
     pub kind: ErrorKind,
 }
 
@@ -90,6 +91,21 @@ impl FancyError {
                     .with_order(-1),
             );
         }
+
+        let call_ariadne_spans = self
+            .call_spans
+            .iter()
+            .map(|call_span| span_to_ariadne(call_span, &self.files))
+            .collect_vec();
+        for (call_source_path, _, call_range) in &call_ariadne_spans {
+            builder.add_label(
+                Label::new((call_source_path, call_range.clone()))
+                    .with_message("In this function call")
+                    .with_color(Color::BrightCyan)
+                    .with_order(-2),
+            );
+        }
+
         builder
             .finish()
             .eprint((&source_path, Source::from(source)))
