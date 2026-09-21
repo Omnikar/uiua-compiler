@@ -15,12 +15,16 @@ jobs:
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 22
-      - name: Checkout
-        uses: actions/checkout@v4
+          sudo apt-get install -y libpolly-22-dev
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-      - name: Run cargo check
-        run: |
-          cargo fmt --check
-          cargo check --all-targets --all-features
-          cargo test --all-targets --all-features
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check formatting
+        run: cargo fmt --check
+      - name: Check compilation
+        run: cargo check --all-targets --all-features
+      - name: Run unit tests
+        env:
+          LLVM_SYS_220_PREFIX: /usr/lib/llvm-22
+        run: cargo test --all-targets --all-features
