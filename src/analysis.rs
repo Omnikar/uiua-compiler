@@ -43,6 +43,7 @@ struct FunctionTranslator<'ctx> {
     value_map: RefCell<HashMap<UirValue, TirValue>>,
     info_map: FrozenMap<NodeIndex, tir::NodeMeta>,
     span_map: RefCell<HashMap<NodeIndex, usize>>,
+    func_input_spans: Vec<&'ctx uiua::Span>,
 }
 
 impl FunctionTranslator<'_> {
@@ -96,6 +97,19 @@ impl FunctionTranslator<'_> {
             &self.info_map[&val.node_idx][val.out_i]
         })
     }
+
+    fn get_uir_span(&self, uir_value: UirValue) -> &uiua::Span {
+        if self.uir_func.graph[uir_value.node_idx] == uir::Node::Input {
+            self.func_input_spans[uir_value.out_i]
+        } else {
+            &self.uir.spans[self
+                .uir_func
+                .spans
+                .get(&uir_value.node_idx)
+                .copied()
+                .unwrap_or(0)]
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -130,18 +144,19 @@ pub fn construct_tir(uir: &uir::Uir) -> Result<tir::Tir, Error> {
     });
 
     if let Some((uir_main, span)) = &uir.main {
-        let main = monomorphize_and_analyze(uir_main, &[], uir, &tir)?;
+        let main = monomorphize_and_analyze(uir_main, &[], uir, &tir, [])?;
         tir.get_mut().main = Some((main, *span));
     }
 
     Ok(tir.into_inner())
 }
 
-fn monomorphize_and_analyze(
+fn monomorphize_and_analyze<'ctx>(
     uir_func: &uir::Function,
     inputs: impl Into<Vec<ValueInfo>>,
     uir: &Uir,
     tir: &RefCell<Tir>,
+    func_input_spans: impl Into<Vec<&'ctx uiua::Span>>,
 ) -> Result<tir::Function, Error> {
     let inputs = inputs.into();
 
@@ -171,6 +186,7 @@ fn monomorphize_and_analyze(
         value_map: RefCell::new(value_map),
         info_map,
         span_map: RefCell::new(HashMap::new()),
+        func_input_spans: func_input_spans.into(),
     };
 
     for node_idx in uir_func.graph.node_indices() {
@@ -210,12 +226,13 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
         .edges(uir_node_idx)
         .sorted_by_key(|e| e.weight().1)
         .map(|e| {
+            let uir_value = UirValue {
+                node_idx: e.target(),
+                out_i: e.weight().0,
+            };
             (
-                tr.value_map.borrow()[&UirValue {
-                    node_idx: e.target(),
-                    out_i: e.weight().0,
-                }],
-                &tr.uir.spans[tr.uir_func.spans.get(&e.target()).copied().unwrap_or(0)],
+                tr.value_map.borrow()[&uir_value],
+                tr.get_uir_span(uir_value),
             )
         })
         .unzip();
@@ -306,8 +323,13 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
                     })
                     .collect::<Option<Vec<_>>>()
                     .ok_or_else(|| ctx.make_error(ErrorKind::Unranked("function call")))?;
-                let tir_func =
-                    monomorphize_and_analyze(uir_func, func_input_infos, tr.uir, tr.tir)?;
+                let tir_func = monomorphize_and_analyze(
+                    uir_func,
+                    func_input_infos,
+                    tr.uir,
+                    tr.tir,
+                    ctx.input_spans,
+                )?;
                 tr.tir.borrow_mut().bindings.push(tir::Binding {
                     span: uir_binding.span.clone(),
                     func_id: uir_binding.func_id.clone(),
