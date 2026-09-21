@@ -348,7 +348,9 @@ impl ValueInfo {
                             if ax.as_const().is_some() {
                                 ax.clone()
                             } else {
-                                Expr::new_var()
+                                let var = Expr::new_var();
+                                substs.push((var.as_single_var().unwrap(), ax.clone()));
+                                var
                             }
                         })
                         .collect(),
