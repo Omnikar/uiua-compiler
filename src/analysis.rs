@@ -272,19 +272,24 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
             let mut tir = tr.tir.borrow();
             let (i, binding) = if let Some((i, binding)) =
                 tir.bindings.iter().enumerate().find(|(_, binding)| {
-                    uiua_func.hash() == binding.hash
+                    let mut new_substs = Vec::new();
+                    let found = uiua_func.hash() == binding.hash
                         && inputs.len() == binding.func.meta.inputs.len()
                         && tr.infos_dyn(&inputs).zip(&binding.func.meta.inputs).all(
                             |(input_info, func_input_info)| match input_info
                                 .match_monomorphization(func_input_info)
                             {
-                                Some(new_substs) => {
-                                    substs.extend(new_substs);
+                                Some(substs) => {
+                                    new_substs.extend(substs);
                                     true
                                 }
                                 None => false,
                             },
-                        )
+                        );
+                    if found {
+                        substs.extend(new_substs);
+                    }
+                    found
                 }) {
                 (i, binding)
             } else {
