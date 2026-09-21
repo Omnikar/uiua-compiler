@@ -389,6 +389,45 @@ impl ValueInfo {
         };
         Some((supertype, substs))
     }
+
+    pub fn substitute_exprs(&self, substs: impl IntoIterator<Item = (usize, Expr)>) -> Self {
+        let substs = substs.into_iter().collect_vec();
+        match self {
+            Self::Array(array_info) => Self::Array(Box::new(match &**array_info {
+                ai @ types::ArrayInfo::Known { .. } => ai.clone(),
+                types::ArrayInfo::Ranked {
+                    element_type,
+                    shape,
+                } => types::ArrayInfo::Ranked {
+                    element_type: element_type.substitute_exprs(substs.clone()),
+                    shape: shape
+                        .iter()
+                        .map(|ax| ax.substitute(substs.clone()))
+                        .collect(),
+                },
+                types::ArrayInfo::Unranked {
+                    element_type,
+                    shape_prefix,
+                    shape_suffix,
+                } => types::ArrayInfo::Unranked {
+                    element_type: element_type.substitute_exprs(substs.clone()),
+                    shape_prefix: shape_prefix
+                        .iter()
+                        .map(|ax| ax.substitute(substs.clone()))
+                        .collect(),
+                    shape_suffix: shape_suffix
+                        .iter()
+                        .map(|ax| ax.substitute(substs.clone()))
+                        .collect(),
+                },
+            })),
+            Self::Map(map_info) => Self::Map(Box::new(types::MapInfo {
+                key_type: map_info.key_type.substitute_exprs(substs.clone()),
+                value_type: map_info.value_type.substitute_exprs(substs),
+            })),
+            _ => self.clone(),
+        }
+    }
 }
 
 pub mod types {

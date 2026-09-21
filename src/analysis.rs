@@ -324,6 +324,7 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
                     })
                     .collect::<Option<Vec<_>>>()
                     .ok_or_else(|| ctx.make_error(ErrorKind::Unranked("function call")))?;
+
                 let tir_func = monomorphize_and_analyze(
                     uir_func,
                     func_input_infos,
@@ -336,6 +337,7 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
                     fancy_err.call_spans.push(span.clone());
                     err
                 })?;
+
                 tr.tir.borrow_mut().bindings.push(tir::Binding {
                     span: uir_binding.span.clone(),
                     func_id: uir_binding.func_id.clone(),
@@ -343,16 +345,23 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
                     func: tir_func,
                 });
                 tir = tr.tir.borrow();
+
                 (tir.bindings.len() - 1, tir.bindings.last().unwrap())
             };
 
-            let outs_count = binding.func.outs_count();
+            let out_infos = binding
+                .func
+                .meta
+                .outputs
+                .iter()
+                .map(|val_info| val_info.substitute_exprs(substs.clone()))
+                .collect_vec();
+
             let outputs = tr.add_node_dyn(
                 tir::Node::Call(i),
-                // TODO: Do substitutions and stuff to get a more granular output for this
-                binding.func.meta.outputs.clone(),
+                out_infos,
                 inputs,
-                outs_count,
+                binding.func.outs_count(),
             );
             for (i, (out, _)) in outputs.into_iter().enumerate() {
                 tr.associate((uir_node_idx, i), out);

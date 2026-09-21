@@ -72,6 +72,28 @@ impl Expr {
         }
         idx
     }
+
+    pub fn substitute(&self, substs: impl IntoIterator<Item = (usize, Self)>) -> Self {
+        let mut result = Expr::from(0isize);
+        let substs = substs.into_iter().collect::<HashMap<_, _>>();
+        for (exps, coef) in &self.terms {
+            let mut new_exps = Vec::new();
+            let mut mul_terms = Vec::new();
+            for (exp_i, &exp) in exps.iter().enumerate() {
+                if let Some(subst) = substs.get(&exp_i) {
+                    new_exps.push(0);
+                    mul_terms.push(subst.pow(exp));
+                } else {
+                    new_exps.push(exp);
+                }
+            }
+            let new_term_expr = Expr {
+                terms: [(new_exps.into(), *coef)].into(),
+            } * mul_terms.into_iter().product::<Expr>();
+            result = result + new_term_expr;
+        }
+        result
+    }
 }
 
 impl From<isize> for Expr {
@@ -162,8 +184,8 @@ impl std::iter::Product for Expr {
     }
 }
 impl Expr {
-    pub fn pow(self, n: u32) -> Self {
-        std::iter::repeat_n(self, n as usize).product()
+    pub fn pow(&self, n: u32) -> Self {
+        std::iter::repeat_n(self.clone(), n as usize).product()
     }
 }
 
@@ -259,4 +281,25 @@ fn decode_num(s: &str, chars: &[char; 10]) -> Result<usize, SyntaxError> {
         .map(|(i, x)| x.map(|x| x * 10usize.pow(u32::try_from(i).unwrap())))
         .sum::<Option<usize>>()
         .ok_or(SyntaxError)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_substitution() {
+        let x0 = Expr::new_var();
+        let x1 = Expr::new_var();
+        let x2 = Expr::new_var();
+
+        let x0_squared = x0.pow(2);
+        let x1_plus_x2 = x1 + x2;
+        let result = x0_squared.substitute([(0, x1_plus_x2)]);
+
+        // (x₁ + x₂)² = x₁² + x₂² + 2x₁x₂
+        assert_eq!(result.terms[&[0u32, 2] as &[u32]], 1);
+        assert_eq!(result.terms[&[0u32, 0, 2] as &[u32]], 1);
+        assert_eq!(result.terms[&[0u32, 1, 1] as &[u32]], 2);
+    }
 }
