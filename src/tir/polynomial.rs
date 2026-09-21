@@ -217,6 +217,14 @@ impl std::str::FromStr for Expr {
             .sum::<Result<Expr, _>>()
     }
 }
+impl From<uiua::Dim> for Expr {
+    fn from(value: uiua::Dim) -> Self {
+        match value {
+            uiua::Dim::Static(val) => val.into(),
+            uiua::Dim::Dyn => Expr::new_var(),
+        }
+    }
+}
 
 const SUBSCRIPT_CHARS: [char; 10] = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
 const SUPERSCRIPT_CHARS: [char; 10] = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'];
