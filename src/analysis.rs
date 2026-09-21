@@ -273,101 +273,108 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
             tr.associate((uir_node_idx, 0), output);
         }
         uir::Node::Call(uiua_func) => {
-            // TODO: Inlining?
-            // TODO: Recursion?
-
-            let uir_binding = tr
-                .uir
-                .borrow()
-                .bindings
-                .iter()
-                .find(|binding| binding.func_id == uiua_func.id)
-                .unwrap();
-            let uir_func = &uir_binding.func;
-
-            let mut substs = Vec::new();
-
-            let mut tir = tr.tir.borrow();
-            let (i, binding) = if let Some((i, binding)) =
-                tir.bindings.iter().enumerate().find(|(_, binding)| {
-                    let mut new_substs = Vec::new();
-                    let found = uiua_func.hash() == binding.hash
-                        && inputs.len() == binding.func.meta.inputs.len()
-                        && tr.infos_dyn(&inputs).zip(&binding.func.meta.inputs).all(
-                            |(input_info, func_input_info)| match input_info
-                                .match_monomorphization(func_input_info)
-                            {
-                                Some(substs) => {
-                                    new_substs.extend(substs);
-                                    true
-                                }
-                                None => false,
-                            },
-                        );
-                    if found {
-                        substs.extend(new_substs);
-                    }
-                    found
-                }) {
-                (i, binding)
-            } else {
-                drop(tir);
-                let input_infos = tr.infos_dyn(&inputs).collect_vec();
-                let func_input_infos = input_infos
-                    .iter()
-                    .copied()
-                    .map(|val| {
-                        val.func_supertype().map(|(styp, new_substs)| {
-                            substs.extend(new_substs);
-                            styp
-                        })
-                    })
-                    .collect::<Option<Vec<_>>>()
-                    .ok_or_else(|| ctx.make_error(ErrorKind::Unranked("function call")))?;
-
-                let tir_func = monomorphize_and_analyze(
-                    uir_func,
-                    func_input_infos,
-                    tr.uir,
-                    tr.tir,
-                    ctx.input_spans,
-                )
-                .map_err(|mut err| {
-                    let Error::FancyError(fancy_err) = &mut err;
-                    fancy_err.call_spans.push(span.clone());
-                    err
-                })?;
-
-                tr.tir.borrow_mut().bindings.push(tir::Binding {
-                    span: uir_binding.span.clone(),
-                    func_id: uir_binding.func_id.clone(),
-                    hash: uir_binding.hash,
-                    func: tir_func,
-                });
-                tir = tr.tir.borrow();
-
-                (tir.bindings.len() - 1, tir.bindings.last().unwrap())
-            };
-
-            let out_infos = binding
-                .func
-                .meta
-                .outputs
-                .iter()
-                .map(|val_info| val_info.substitute_exprs(substs.clone()))
-                .collect_vec();
-
-            let outputs = tr.add_node_dyn(
-                tir::Node::Call(i),
-                out_infos,
-                inputs,
-                binding.func.outs_count(),
-            );
-            for (i, (out, _)) in outputs.into_iter().enumerate() {
-                tr.associate((uir_node_idx, i), out);
-            }
+            translate_function_call(uiua_func, &inputs, ctx, uir_node_idx, &tr)?;
         }
         _ => todo!("{uir_node:?}"),
+    }
+
+    Ok(())
+}
+
+fn translate_function_call(
+    uiua_func: &uiua::Function,
+    inputs: &[TirValue],
+    ctx: AnalyzeContext,
+    uir_node_idx: NodeIndex,
+    tr: &FunctionTranslator,
+) -> Result<(), Error> {
+    // TODO: Inlining?
+    // TODO: Recursion?
+
+    let uir_binding = tr
+        .uir
+        .borrow()
+        .bindings
+        .iter()
+        .find(|binding| binding.func_id == uiua_func.id)
+        .unwrap();
+    let uir_func = &uir_binding.func;
+
+    let mut substs = Vec::new();
+
+    let mut tir = tr.tir.borrow();
+    let (i, binding) = if let Some((i, binding)) =
+        tir.bindings.iter().enumerate().find(|(_, binding)| {
+            let mut new_substs = Vec::new();
+            let found = uiua_func.hash() == binding.hash
+                && inputs.len() == binding.func.meta.inputs.len()
+                && tr.infos_dyn(inputs).zip(&binding.func.meta.inputs).all(
+                    |(input_info, func_input_info)| match input_info
+                        .match_monomorphization(func_input_info)
+                    {
+                        Some(substs) => {
+                            new_substs.extend(substs);
+                            true
+                        }
+                        None => false,
+                    },
+                );
+            if found {
+                substs.extend(new_substs);
+            }
+            found
+        }) {
+        (i, binding)
+    } else {
+        drop(tir);
+        let input_infos = tr.infos_dyn(inputs).collect_vec();
+        let func_input_infos = input_infos
+            .iter()
+            .copied()
+            .map(|val| {
+                val.func_supertype().map(|(styp, new_substs)| {
+                    substs.extend(new_substs);
+                    styp
+                })
+            })
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| ctx.make_error(ErrorKind::Unranked("function call")))?;
+
+        let tir_func =
+            monomorphize_and_analyze(uir_func, func_input_infos, tr.uir, tr.tir, ctx.input_spans)
+                .map_err(|mut err| {
+                let Error::FancyError(fancy_err) = &mut err;
+                fancy_err.call_spans.push(ctx.span.clone());
+                err
+            })?;
+
+        tr.tir.borrow_mut().bindings.push(tir::Binding {
+            span: uir_binding.span.clone(),
+            func_id: uir_binding.func_id.clone(),
+            hash: uir_binding.hash,
+            func: tir_func,
+        });
+        tir = tr.tir.borrow();
+
+        (tir.bindings.len() - 1, tir.bindings.last().unwrap())
+    };
+
+    let out_infos = binding
+        .func
+        .meta
+        .outputs
+        .iter()
+        .map(|val_info| val_info.substitute_exprs(substs.clone()))
+        .collect_vec();
+
+    let outputs = tr.add_node_dyn(
+        tir::Node::Call(i),
+        out_infos,
+        inputs.iter().copied(),
+        binding.func.outs_count(),
+    );
+    for (i, (out, _)) in outputs.into_iter().enumerate() {
+        tr.associate((uir_node_idx, i), out);
     }
 
     Ok(())
