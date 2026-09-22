@@ -225,6 +225,7 @@ impl ValueInfo {
         }
     }
 
+    // NOTE: Watch out for what this does on array-type elements of arrays-of-arrays
     pub fn with_prepended_first_axis(&self, ax: Expr) -> Self {
         Self::Array(Box::new(match self {
             Self::Array(array_info) => match &**array_info {

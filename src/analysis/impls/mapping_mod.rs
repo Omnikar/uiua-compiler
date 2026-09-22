@@ -55,32 +55,40 @@ pub fn rows(
                             }
                             (Some(n), None, _, side) | (None, Some(n), side, _) => {
                                 let input_i = side.select(old_i, new_i);
-                                let inputs = inputs.to_mut();
-                                [(inputs[input_i], _)] = tr.add_node(
-                                    tir::TirOp::CheckAxis {
-                                        depth: 0,
-                                        ax_i: 0,
-                                        length: n.cast_unsigned(),
-                                    }
-                                    .into(),
-                                    [input_infos[input_i].clone()],
-                                    [inputs[input_i]],
-                                );
-                                (n.into(), side.select(new_i, old_i))
+                                if n == 1 {
+                                    let inputs = inputs.to_mut();
+                                    [(inputs[input_i], _)] = tr.add_node(
+                                        tir::TirOp::CheckAxis {
+                                            depth: 0,
+                                            ax_i: 0,
+                                            length: n.cast_unsigned(),
+                                        }
+                                        .into(),
+                                        [input_infos[input_i].clone()],
+                                        [inputs[input_i]],
+                                    );
+                                    (n.into(), side.select(new_i, old_i))
+                                } else {
+                                    (side.select(n_expr, m_expr), input_i)
+                                }
                             }
                             (None, None, ..) => {
                                 let inputs = inputs.to_mut();
-                                [(inputs[old_i], _), (inputs[new_i], _)] = tr.add_node(
-                                    tir::TirOp::CheckAxes {
-                                        lhs_depth: 0,
-                                        lhs_ax_i: 0,
-                                        rhs_depth: 0,
-                                        rhs_ax_i: 0,
-                                    }
-                                    .into(),
-                                    [input_infos[old_i].clone(), input_infos[new_i].clone()],
-                                    [inputs[old_i], inputs[new_i]],
-                                );
+
+                                if (n_expr.clone() - m_expr).as_const().is_none_or(|x| x != 0) {
+                                    [(inputs[old_i], _), (inputs[new_i], _)] = tr.add_node(
+                                        tir::TirOp::CheckAxes {
+                                            lhs_depth: 0,
+                                            lhs_ax_i: 0,
+                                            rhs_depth: 0,
+                                            rhs_ax_i: 0,
+                                        }
+                                        .into(),
+                                        [input_infos[old_i].clone(), input_infos[new_i].clone()],
+                                        [inputs[old_i], inputs[new_i]],
+                                    );
+                                }
+
                                 (n_expr, old_i)
                             }
                         },
