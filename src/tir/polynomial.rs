@@ -73,9 +73,12 @@ impl Expr {
         idx
     }
 
-    pub fn instantiate_vars(&self, substs: impl IntoIterator<Item = (usize, Self)>) -> Self {
+    pub fn instantiate_vars(
+        &self,
+        substs: impl IntoIterator<Item = (usize, Self)>,
+        new_var_cache: &mut HashMap<usize, Expr>,
+    ) -> Self {
         let substs = substs.into_iter().collect::<HashMap<_, _>>();
-        let mut new_var_cache = HashMap::<usize, Expr>::new();
         self.terms
             .iter()
             .map(|(exps, &coef)| {
@@ -296,7 +299,7 @@ mod tests {
 
         let x0_squared = x0.pow(2);
         let x1_plus_x2 = x1 + x2;
-        let result = x0_squared.instantiate_vars([(0, x1_plus_x2)]);
+        let result = x0_squared.instantiate_vars([(0, x1_plus_x2)], &mut HashMap::new());
 
         // (x₁ + x₂)² = x₁² + x₂² + 2x₁x₂
         assert_eq!(result.terms[&[0u32, 2] as &[u32]], 1);
@@ -312,7 +315,7 @@ mod tests {
 
         let x2_squared = x2.pow(2);
         let x0_plus_x1 = x0 + x1;
-        let result = x2_squared.instantiate_vars([(2, x0_plus_x1)]);
+        let result = x2_squared.instantiate_vars([(2, x0_plus_x1)], &mut HashMap::new());
 
         // (x₀ + x₁)² = x₀² + x₁² + 2x₀x₁
         assert_eq!(result.terms[&[2u32] as &[u32]], 1);
