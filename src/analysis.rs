@@ -309,14 +309,11 @@ fn translate_function_call(
             let found = uiua_func.hash() == binding.hash
                 && inputs.len() == binding.func.meta.inputs.len()
                 && tr.infos_dyn(inputs).zip(&binding.func.meta.inputs).all(
-                    |(input_info, func_input_info)| match input_info
-                        .match_monomorphization(func_input_info)
-                    {
-                        Some(substs) => {
-                            new_substs.extend(substs);
-                            true
-                        }
-                        None => false,
+                    |(input_info, func_input_info)| {
+                        input_info
+                            .match_monomorphization(func_input_info)
+                            .map(|substs| new_substs.extend(substs))
+                            .is_some()
                     },
                 );
             if found {
