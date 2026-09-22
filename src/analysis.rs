@@ -359,13 +359,13 @@ fn translate_function_call(
         (tir.bindings.len() - 1, tir.bindings.last().unwrap())
     };
 
-    let mut new_var_cache = HashMap::new();
+    let mut subst_cache = substs.into_iter().collect();
     let out_infos = binding
         .func
         .meta
         .outputs
         .iter()
-        .map(|val_info| val_info.instantiate_vars(substs.clone(), &mut new_var_cache))
+        .map(|val_info| val_info.instantiate_vars(&mut subst_cache))
         .collect_vec();
 
     let outputs = tr.add_node_dyn(
