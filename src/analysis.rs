@@ -33,6 +33,27 @@ struct TirValue {
     out_i: usize,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Side {
+    Left,
+    Right,
+}
+impl Side {
+    fn select<T>(self, lhs: T, rhs: T) -> T {
+        match self {
+            Self::Left => lhs,
+            Self::Right => rhs,
+        }
+    }
+
+    fn place_first<T>(self, lhs: T, rhs: T) -> (T, T) {
+        match self {
+            Self::Left => (lhs, rhs),
+            Self::Right => (rhs, lhs),
+        }
+    }
+}
+
 /// Responsible for managing the translation of UIR to TIR
 #[derive(Clone)]
 struct FunctionTranslator<'ctx> {
@@ -276,6 +297,13 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
             let [lhs, rhs] = inputs.try_into().unwrap();
             let output = impl_fn(lhs, rhs, tr, ctx)?;
             tr.associate((uir_node_idx, 0), output);
+        }
+        uir::Node::ModPrim(prim, funcs) if let Some(impl_fn) = impls::mapping_mod(*prim) => {
+            let func = &funcs[0];
+            let outputs = impl_fn(func, &inputs, tr, ctx, input_spans.clone())?;
+            for (out_i, tir_value) in outputs.into_iter().enumerate() {
+                tr.associate((uir_node_idx, out_i), tir_value);
+            }
         }
         _ => todo!("{uir_node:?}"),
     }

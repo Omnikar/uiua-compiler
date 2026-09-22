@@ -1,9 +1,12 @@
 mod pervasive_monadic;
 mod pervasive_dyadic;
+mod mapping_mod;
 mod func;
 
-use super::{AnalyzeContext, Error, ErrorKind, FunctionTranslator, TirValue, ValueInfo, types};
-use crate::{tir, uir};
+use super::{
+    AnalyzeContext, Error, ErrorKind, FunctionTranslator, Side, TirValue, ValueInfo, types,
+};
+use crate::{analysis, tir, uir};
 
 use uiua::{ImplPrimitive as Ip, Primitive as Pr};
 
@@ -76,5 +79,23 @@ pub fn dyadic_prim(prim: uir::Prim) -> Option<DyadicImplFn> {
             // TODO: See https://github.com/uiua-lang/uiua/blob/8ff2203/src/impl_prim.rs#L107-L304
             _ => return None,
         },
+    })
+}
+
+pub type MappingModImplFn = fn(
+    &uir::Function,
+    &[TirValue],
+    &FunctionTranslator,
+    AnalyzeContext,
+    Vec<&uiua::Span>,
+) -> Result<Vec<TirValue>, Error>;
+pub fn mapping_mod(prim: uir::Prim) -> Option<MappingModImplFn> {
+    use mapping_mod as mm;
+    Some(match prim {
+        uir::Prim::Prim(prim) => match prim {
+            Pr::Rows => mm::rows,
+            _ => return None,
+        },
+        _ => return None,
     })
 }
