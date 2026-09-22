@@ -1,4 +1,4 @@
-pub mod polynomial;
+mod polynomial;
 
 use derive_more::From;
 use itertools::Itertools;
@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use polynomial::Expr;
+pub use polynomial::Expr;
 
 /// Typed IR, created via static analysis of UIR
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -392,7 +392,7 @@ impl ValueInfo {
         Some((supertype, substs))
     }
 
-    pub fn substitute_exprs(&self, substs: impl IntoIterator<Item = (usize, Expr)>) -> Self {
+    pub fn instantiate_vars(&self, substs: impl IntoIterator<Item = (usize, Expr)>) -> Self {
         let substs = substs.into_iter().collect_vec();
         match self {
             Self::Array(array_info) => Self::Array(Box::new(match &**array_info {
@@ -401,10 +401,10 @@ impl ValueInfo {
                     element_type,
                     shape,
                 } => types::ArrayInfo::Ranked {
-                    element_type: element_type.substitute_exprs(substs.clone()),
+                    element_type: element_type.instantiate_vars(substs.clone()),
                     shape: shape
                         .iter()
-                        .map(|ax| ax.substitute(substs.clone()))
+                        .map(|ax| ax.instantiate_vars(substs.clone()))
                         .collect(),
                 },
                 types::ArrayInfo::Unranked {
@@ -412,20 +412,20 @@ impl ValueInfo {
                     shape_prefix,
                     shape_suffix,
                 } => types::ArrayInfo::Unranked {
-                    element_type: element_type.substitute_exprs(substs.clone()),
+                    element_type: element_type.instantiate_vars(substs.clone()),
                     shape_prefix: shape_prefix
                         .iter()
-                        .map(|ax| ax.substitute(substs.clone()))
+                        .map(|ax| ax.instantiate_vars(substs.clone()))
                         .collect(),
                     shape_suffix: shape_suffix
                         .iter()
-                        .map(|ax| ax.substitute(substs.clone()))
+                        .map(|ax| ax.instantiate_vars(substs.clone()))
                         .collect(),
                 },
             })),
             Self::Map(map_info) => Self::Map(Box::new(types::MapInfo {
-                key_type: map_info.key_type.substitute_exprs(substs.clone()),
-                value_type: map_info.value_type.substitute_exprs(substs),
+                key_type: map_info.key_type.instantiate_vars(substs.clone()),
+                value_type: map_info.value_type.instantiate_vars(substs),
             })),
             _ => self.clone(),
         }

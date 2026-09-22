@@ -364,7 +364,7 @@ fn translate_function_call(
         .meta
         .outputs
         .iter()
-        .map(|val_info| val_info.substitute_exprs(substs.clone()))
+        .map(|val_info| val_info.instantiate_vars(substs.clone()))
         .collect_vec();
 
     let outputs = tr.add_node_dyn(
