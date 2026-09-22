@@ -73,6 +73,19 @@ impl Expr {
         idx
     }
 
+    /// Plug values into this expression to create a new expression
+    ///
+    /// Substitutions for each variable are read from the corresponding `Expr` in
+    /// `subst_cache`. If a variable is not found, a new variable is created to
+    /// substitute for it, and the new variable is added to `subst_cache` to be used
+    /// for further substitutions.
+    ///
+    /// For example, consider the expression `x₀ + x₁`. Suppose this is instantiated with
+    /// a `subst_cache` containing the entry `(1, 5)`, indicating to replace `x₁` with the
+    /// expression `5`. The resulting expression would look something like `x₂ + 5`, and
+    /// `subst_cache` will be left containing both `(1, 5)` and `(0, x₂)`. Thus, if
+    /// `subst_cache` is reused for future calls to `instantiate_vars`, they will also
+    /// replace `x₀` with `x₂` instead of creating a new variable each time.
     pub fn instantiate_vars(&self, subst_cache: &mut HashMap<usize, Expr>) -> Self {
         self.terms
             .iter()
