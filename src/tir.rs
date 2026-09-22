@@ -393,7 +393,11 @@ impl ValueInfo {
         Some((supertype, substs))
     }
 
-    pub fn instantiate_vars(&self, substs: impl IntoIterator<Item = (usize, Expr)>) -> Self {
+    pub fn instantiate_vars(
+        &self,
+        substs: impl IntoIterator<Item = (usize, Expr)>,
+        new_var_cache: &mut HashMap<usize, Expr>,
+    ) -> Self {
         let substs = substs.into_iter().collect_vec();
         match self {
             Self::Array(array_info) => Self::Array(Box::new(match &**array_info {
@@ -402,10 +406,10 @@ impl ValueInfo {
                     element_type,
                     shape,
                 } => types::ArrayInfo::Ranked {
-                    element_type: element_type.instantiate_vars(substs.clone()),
+                    element_type: element_type.instantiate_vars(substs.clone(), new_var_cache),
                     shape: shape
                         .iter()
-                        .map(|ax| ax.instantiate_vars(substs.clone()))
+                        .map(|ax| ax.instantiate_vars(substs.clone(), new_var_cache))
                         .collect(),
                 },
                 types::ArrayInfo::Unranked {
@@ -413,20 +417,22 @@ impl ValueInfo {
                     shape_prefix,
                     shape_suffix,
                 } => types::ArrayInfo::Unranked {
-                    element_type: element_type.instantiate_vars(substs.clone()),
+                    element_type: element_type.instantiate_vars(substs.clone(), new_var_cache),
                     shape_prefix: shape_prefix
                         .iter()
-                        .map(|ax| ax.instantiate_vars(substs.clone()))
+                        .map(|ax| ax.instantiate_vars(substs.clone(), new_var_cache))
                         .collect(),
                     shape_suffix: shape_suffix
                         .iter()
-                        .map(|ax| ax.instantiate_vars(substs.clone()))
+                        .map(|ax| ax.instantiate_vars(substs.clone(), new_var_cache))
                         .collect(),
                 },
             })),
             Self::Map(map_info) => Self::Map(Box::new(types::MapInfo {
-                key_type: map_info.key_type.instantiate_vars(substs.clone()),
-                value_type: map_info.value_type.instantiate_vars(substs),
+                key_type: map_info
+                    .key_type
+                    .instantiate_vars(substs.clone(), new_var_cache),
+                value_type: map_info.value_type.instantiate_vars(substs, new_var_cache),
             })),
             _ => self.clone(),
         }
