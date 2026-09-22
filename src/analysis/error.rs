@@ -105,11 +105,19 @@ impl FancyError {
                     .with_order(-2),
             );
         }
+        let (call_source_paths, call_sources, _): (Vec<_>, Vec<_>, Vec<_>) =
+            call_ariadne_spans.into_iter().multiunzip();
 
         let sources = input_source_paths
             .into_iter()
+            .chain(call_source_paths)
             .chain(Some(source_path))
-            .zip_eq(input_sources.into_iter().chain(Some(source)));
+            .zip_eq(
+                input_sources
+                    .into_iter()
+                    .chain(call_sources)
+                    .chain(Some(source)),
+            );
         let mut cache = ariadne::sources(sources);
 
         builder.finish().eprint(&mut cache).unwrap();
