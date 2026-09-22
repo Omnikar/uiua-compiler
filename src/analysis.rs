@@ -323,6 +323,8 @@ fn translate_function_call(
         }) {
         (i, binding)
     } else {
+        // Release the `RefCell` so that we can pass it to the recursive
+        // `monomorphize_and_analyze` call safely
         drop(tir);
         let input_infos = tr.infos_dyn(inputs).collect_vec();
         let func_input_infos = input_infos
