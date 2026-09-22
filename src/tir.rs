@@ -139,7 +139,7 @@ pub fn demote_known_shape(known_shape: &[usize]) -> Vec<Expr> {
     known_shape.iter().copied().map(Expr::from).collect()
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ValueInfo {
     Scalar(types::ScalarInfo),
     Array(Box<types::ArrayInfo>),
@@ -440,7 +440,7 @@ pub mod types {
     use super::{SymShape, ValueInfo};
     use crate::tir::polynomial::Expr;
 
-    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
     pub enum ScalarInfo {
         Bool(Option<bool>),
         /// Bool stores whether this represents integer-or-infinity
@@ -507,13 +507,13 @@ pub mod types {
         }
     }
 
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct ArrayValue {
         pub shape: Vec<usize>,
         pub data: Vec<ValueInfo>,
     }
 
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum ArrayInfo {
         /// Exact value known at compile time
         Known {
@@ -703,7 +703,7 @@ pub mod types {
         }
     }
 
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct MapInfo {
         pub key_type: ValueInfo,
         pub value_type: ValueInfo,
@@ -720,12 +720,12 @@ pub mod types {
         }
     }
 
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct StructInfo {
         pub fields: Rc<[(String, ValueInfo)]>,
     }
 
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct EnumInfo {
         pub variants: Rc<[(String, StructInfo)]>,
     }
