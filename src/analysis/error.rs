@@ -111,12 +111,12 @@ impl FancyError {
         let sources = input_source_paths
             .into_iter()
             .chain(call_source_paths)
-            .chain(Some(source_path))
+            .chain([source_path])
             .zip_eq(
                 input_sources
                     .into_iter()
                     .chain(call_sources)
-                    .chain(Some(source)),
+                    .chain([source]),
             );
         let mut cache = ariadne::sources(sources);
 
