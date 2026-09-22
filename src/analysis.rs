@@ -260,6 +260,9 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
                 tr.add_node(tir::Node::Constant(value_info.clone()), [value_info], []);
             tr.associate((uir_node_idx, 0), value);
         }
+        uir::Node::Call(uiua_func) => {
+            translate_function_call(uiua_func, &inputs, ctx, uir_node_idx, tr)?;
+        }
         uir::Node::FuncPrim(prim) if let Some(impl_fn) = impls::monadic_prim(*prim) => {
             let [input_info] = tr.infos([inputs[0]]);
             let output_info = impl_fn(input_info, ctx)?;
@@ -271,9 +274,6 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
             let [lhs, rhs] = inputs.try_into().unwrap();
             let output = impl_fn(lhs, rhs, tr, ctx)?;
             tr.associate((uir_node_idx, 0), output);
-        }
-        uir::Node::Call(uiua_func) => {
-            translate_function_call(uiua_func, &inputs, ctx, uir_node_idx, tr)?;
         }
         _ => todo!("{uir_node:?}"),
     }
