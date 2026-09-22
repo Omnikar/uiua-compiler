@@ -3,30 +3,10 @@
 use itertools::Itertools;
 
 use super::{
-    AnalyzeContext, Error, ErrorKind, FunctionTranslator, TirValue, ValueInfo, tir, types,
+    AnalyzeContext, Error, ErrorKind, FunctionTranslator, Side, TirValue, ValueInfo, tir, types,
 };
 use types::ScalarInfo as S;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Side {
-    Left,
-    Right,
-}
-impl Side {
-    fn select<T>(self, lhs: T, rhs: T) -> T {
-        match self {
-            Self::Left => lhs,
-            Self::Right => rhs,
-        }
-    }
-
-    fn place_first<T>(self, lhs: T, rhs: T) -> (T, T) {
-        match self {
-            Self::Left => (lhs, rhs),
-            Self::Right => (rhs, lhs),
-        }
-    }
-}
 enum ScalarTypeMatch {
     Identical,
     Matching(Side, types::ScalarInfo, types::ScalarInfo),
