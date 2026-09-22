@@ -224,6 +224,49 @@ impl ValueInfo {
             _ => None,
         }
     }
+
+    pub fn with_prepended_first_axis(&self, ax: Expr) -> Self {
+        Self::Array(Box::new(match self {
+            Self::Array(array_info) => match &**array_info {
+                types::ArrayInfo::Known {
+                    element_type,
+                    value,
+                } => types::ArrayInfo::Ranked {
+                    element_type: element_type.clone(),
+                    shape: [ax]
+                        .into_iter()
+                        .chain(value.shape.iter().copied().map(Expr::from))
+                        .collect(),
+                },
+                types::ArrayInfo::Ranked {
+                    element_type,
+                    shape,
+                } => types::ArrayInfo::Ranked {
+                    element_type: element_type.clone(),
+                    shape: [ax].into_iter().chain(shape.iter().cloned()).collect(),
+                },
+                types::ArrayInfo::Unranked {
+                    element_type,
+                    shape_prefix,
+                    shape_suffix,
+                } => types::ArrayInfo::Unranked {
+                    element_type: element_type.clone(),
+                    shape_prefix: [ax]
+                        .into_iter()
+                        .chain(shape_prefix.iter().cloned())
+                        .collect(),
+                    shape_suffix: [Expr::new_var()]
+                        .into_iter()
+                        .chain(shape_suffix.iter().cloned())
+                        .collect(),
+                },
+            },
+            _ => types::ArrayInfo::Ranked {
+                element_type: self.clone(),
+                shape: [ax.clone()].into(),
+            },
+        }))
+    }
 }
 
 pub mod types {
@@ -483,6 +526,40 @@ pub mod types {
                 .supertype(other),
                 _ => todo!(),
             }
+        }
+
+        pub fn split_first_axis(&self) -> Option<(Expr, ValueInfo)> {
+            Some(match self {
+                Self::Known {
+                    element_type,
+                    value,
+                } => (
+                    value.shape[0].into(),
+                    match value.shape.len() {
+                        1 => element_type.clone(),
+                        2.. => ValueInfo::Array(Box::new(Self::Ranked {
+                            element_type: element_type.clone(),
+                            shape: value.shape[1..].iter().copied().map(Expr::from).collect(),
+                        })),
+                        _ => return None,
+                    },
+                ),
+                Self::Ranked {
+                    element_type,
+                    shape,
+                } => (
+                    shape[0].clone(),
+                    match shape.len() {
+                        1 => element_type.clone(),
+                        2.. => ValueInfo::Array(Box::new(Self::Ranked {
+                            element_type: element_type.clone(),
+                            shape: shape[1..].to_vec(),
+                        })),
+                        _ => return None,
+                    },
+                ),
+                _ => return None,
+            })
         }
     }
 

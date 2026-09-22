@@ -31,6 +31,8 @@ pub enum ErrorKind {
     IncompatibleTypes(&'static str, Rc<str>, Rc<str>),
     #[error("Incompatible shapes: {0} and {1}")]
     IncompatibleShapes(Rc<str>, Rc<str>),
+    #[error("Mismatched row counts: {0} and {2}")]
+    MismatchedRowCounts(isize, usize, isize, usize),
 }
 
 trait Msg {
@@ -64,6 +66,15 @@ impl FancyError {
         source_msg: impl Msg,
         input_msgs: impl IntoIterator<Item = impl Msg>,
     ) {
+        self.with_input_msg_idxs(parent_msg, source_msg, input_msgs.into_iter().enumerate());
+    }
+
+    fn with_input_msg_idxs(
+        &self,
+        parent_msg: impl ToString,
+        source_msg: impl Msg,
+        input_msgs: impl IntoIterator<Item = (usize, impl Msg)>,
+    ) {
         let (source_path, source, range) = span_to_ariadne(&self.span, &self.files);
         let (input_source_paths, input_sources, input_ranges): (Vec<_>, Vec<_>, Vec<_>) = self
             .input_spans
@@ -82,7 +93,7 @@ impl FancyError {
                     .with_color(color),
             );
         let input_msgs = input_msgs.into_iter().collect_vec();
-        for (i, msg) in input_msgs.into_iter().enumerate().rev() {
+        for (i, msg) in input_msgs.into_iter().rev() {
             let color = colors.next();
             builder.add_label(
                 Label::new((input_source_paths[i].clone(), input_ranges[i].clone()))
@@ -160,6 +171,31 @@ impl FancyError {
                     Box::new(move |c| format!("{} produced here", capitalize(&right).fg(c))),
                 ],
             ),
+            Ek::MismatchedRowCounts(left_len, left_i, right_len, right_i) => self
+                .with_input_msg_idxs(
+                    &self.kind,
+                    "Row counts must match",
+                    [
+                        (
+                            left_i,
+                            Box::new(move |c| {
+                                format!(
+                                    "{} argument produced here",
+                                    format!("{left_len} row").fg(c)
+                                )
+                            }) as Box<dyn Msg>,
+                        ),
+                        (
+                            right_i,
+                            Box::new(move |c| {
+                                format!(
+                                    "{} argument produced here",
+                                    format!("{right_len} row").fg(c)
+                                )
+                            }),
+                        ),
+                    ],
+                ),
         }
     }
 }
