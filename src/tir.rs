@@ -296,10 +296,11 @@ impl ValueInfo {
                     }
                     let mut substs = this_element_type.match_monomorphization(func_element_type)?;
                     for (this_ax, func_ax) in this_shape.iter().zip(func_shape) {
-                        if let Some((this_ax, func_ax)) = this_ax.as_const().zip(func_ax.as_const())
-                            && this_ax == func_ax
-                        {
-                            continue;
+                        if let Some(this_ax) = this_ax.as_const() {
+                            match func_ax.as_const() {
+                                Some(func_ax) if func_ax == this_ax => continue,
+                                _ => return None,
+                            }
                         }
                         let var_i = func_ax.as_single_var()?;
                         substs.push((var_i, this_ax.clone()));
