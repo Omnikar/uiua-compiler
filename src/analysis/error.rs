@@ -1,4 +1,4 @@
-use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
+use ariadne::{Color, Fmt, Label, Report, ReportKind};
 use itertools::Itertools;
 use rand::{RngExt, SeedableRng};
 use std::borrow::Cow;
@@ -15,6 +15,7 @@ pub struct FancyError {
     pub files: Rc<HashMap<PathBuf, String>>,
     pub span: uiua::Span,
     pub input_spans: Vec<uiua::Span>,
+    pub call_spans: Vec<uiua::Span>,
     pub kind: ErrorKind,
 }
 
@@ -64,7 +65,7 @@ impl FancyError {
         input_msgs: impl IntoIterator<Item = impl Msg>,
     ) {
         let (source_path, source, range) = span_to_ariadne(&self.span, &self.files);
-        let (input_source_paths, _input_sources, input_ranges): (Vec<_>, Vec<_>, Vec<_>) = self
+        let (input_source_paths, input_sources, input_ranges): (Vec<_>, Vec<_>, Vec<_>) = self
             .input_spans
             .iter()
             .map(|input_span| span_to_ariadne(input_span, &self.files))
@@ -73,10 +74,10 @@ impl FancyError {
         let mut colors = PastelGenerator::new();
 
         let color = colors.next();
-        let mut builder = Report::build(ReportKind::Error, (&source_path, range.clone()))
+        let mut builder = Report::build(ReportKind::Error, (source_path.clone(), range.clone()))
             .with_message(parent_msg)
             .with_label(
-                Label::new((&source_path, range))
+                Label::new((source_path.clone(), range))
                     .with_message(source_msg.fmt(color))
                     .with_color(color),
             );
@@ -84,16 +85,42 @@ impl FancyError {
         for (i, msg) in input_msgs.into_iter().enumerate().rev() {
             let color = colors.next();
             builder.add_label(
-                Label::new((&input_source_paths[i], input_ranges[i].clone()))
+                Label::new((input_source_paths[i].clone(), input_ranges[i].clone()))
                     .with_message(msg.fmt(color))
                     .with_color(color)
                     .with_order(-1),
             );
         }
-        builder
-            .finish()
-            .eprint((&source_path, Source::from(source)))
-            .unwrap();
+
+        let call_ariadne_spans = self
+            .call_spans
+            .iter()
+            .map(|call_span| span_to_ariadne(call_span, &self.files))
+            .collect_vec();
+        for (call_source_path, _, call_range) in &call_ariadne_spans {
+            builder.add_label(
+                Label::new((call_source_path.clone(), call_range.clone()))
+                    .with_message("In this function call")
+                    .with_color(Color::BrightCyan)
+                    .with_order(-2),
+            );
+        }
+        let (call_source_paths, call_sources, _): (Vec<_>, Vec<_>, Vec<_>) =
+            call_ariadne_spans.into_iter().multiunzip();
+
+        let sources = input_source_paths
+            .into_iter()
+            .chain(call_source_paths)
+            .chain([source_path])
+            .zip_eq(
+                input_sources
+                    .into_iter()
+                    .chain(call_sources)
+                    .chain([source]),
+            );
+        let mut cache = ariadne::sources(sources);
+
+        builder.finish().eprint(&mut cache).unwrap();
     }
 
     pub fn eprint(&self) {
@@ -151,27 +178,25 @@ fn capitalize(s: &str) -> Cow<'_, str> {
 fn span_to_ariadne<'a>(
     span: &'a uiua::Span,
     files: &'a HashMap<PathBuf, String>,
-) -> (Cow<'a, str>, &'a str, Range<usize>) {
+) -> (Rc<str>, &'a str, Range<usize>) {
     span.code_ref()
         .and_then(|span| code_span_to_ariadne(span, files))
-        .unwrap_or_else(|| (Cow::default(), "", 0..0))
+        .unwrap_or_else(|| (Rc::default(), "", 0..0))
 }
 
 fn code_span_to_ariadne<'a>(
     span: &'a uiua::CodeSpan,
     files: &'a HashMap<PathBuf, String>,
-) -> Option<(Cow<'a, str>, &'a str, Range<usize>)> {
+) -> Option<(Rc<str>, &'a str, Range<usize>)> {
     match &span.src {
         uiua::InputSrc::File(path) => Some((
-            path.to_string_lossy(),
+            path.to_string_lossy().into(),
             &*files[&**path],
             span.start.char_pos as usize..span.end.char_pos as usize,
         )),
         uiua::InputSrc::Str(_) => None,
         uiua::InputSrc::Macro(code_span) => code_span_to_ariadne(code_span, files),
-        uiua::InputSrc::Literal(string) => {
-            Some((Cow::default(), string, 0..string.chars().count()))
-        }
+        uiua::InputSrc::Literal(string) => Some((Rc::default(), string, 0..string.chars().count())),
     }
 }
 

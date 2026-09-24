@@ -47,6 +47,63 @@ impl Expr {
             _ => None,
         }
     }
+
+    /// If this expression is a single variable with coefficient 1, return its variable index
+    pub fn as_single_var(&self) -> Option<usize> {
+        debug_assert!(self.terms.values().all(|coef| *coef != 0));
+        if self.terms.len() != 1 {
+            return None;
+        }
+        let (exps, &coef) = self.terms.iter().next().unwrap();
+        if coef != 1 {
+            return None;
+        }
+        let mut idx = None;
+        for (exp_i, &exp) in exps.iter().enumerate() {
+            if exp == 0 {
+            } else if exp == 1 {
+                if idx.is_some() {
+                    return None;
+                }
+                idx = Some(exp_i);
+            } else {
+                return None;
+            }
+        }
+        idx
+    }
+
+    /// Plug values into this expression to create a new expression
+    ///
+    /// Substitutions for each variable are read from the corresponding `Expr` in
+    /// `subst_cache`. If a variable is not found, a new variable is created to
+    /// substitute for it, and the new variable is added to `subst_cache` to be used
+    /// for further substitutions.
+    ///
+    /// For example, consider the expression `x₀ + x₁`. Suppose this is instantiated with
+    /// a `subst_cache` containing the entry `(1, 5)`, indicating to replace `x₁` with the
+    /// expression `5`. The resulting expression would look something like `x₂ + 5`, and
+    /// `subst_cache` will be left containing both `(1, 5)` and `(0, x₂)`. Thus, if
+    /// `subst_cache` is reused for future calls to `instantiate_vars`, they will also
+    /// replace `x₀` with `x₂` instead of creating a new variable each time.
+    pub fn instantiate_vars(&self, subst_cache: &mut HashMap<usize, Expr>) -> Self {
+        self.terms
+            .iter()
+            .map(|(exps, &coef)| {
+                coef * exps
+                    .iter()
+                    .enumerate()
+                    .filter(|&(_, &exp)| exp != 0)
+                    .map(|(exp_i, &exp)| {
+                        subst_cache
+                            .entry(exp_i)
+                            .or_insert_with(Expr::new_var)
+                            .pow(exp)
+                    })
+                    .product::<Expr>()
+            })
+            .sum::<Expr>()
+    }
 }
 
 impl From<isize> for Expr {
@@ -137,8 +194,8 @@ impl std::iter::Product for Expr {
     }
 }
 impl Expr {
-    pub fn pow(self, n: u32) -> Self {
-        std::iter::repeat_n(self, n as usize).product()
+    pub fn pow(&self, n: u32) -> Self {
+        std::iter::repeat_n(self.clone(), n as usize).product()
     }
 }
 
@@ -234,4 +291,41 @@ fn decode_num(s: &str, chars: &[char; 10]) -> Result<usize, SyntaxError> {
         .map(|(i, x)| x.map(|x| x * 10usize.pow(u32::try_from(i).unwrap())))
         .sum::<Option<usize>>()
         .ok_or(SyntaxError)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_substitution() {
+        let x0 = Expr::new_var();
+        let x1 = Expr::new_var();
+        let x2 = Expr::new_var();
+
+        let x0_squared = x0.pow(2);
+        let x1_plus_x2 = x1 + x2;
+        let result = x0_squared.instantiate_vars(&mut [(0, x1_plus_x2)].into());
+
+        // (x₁ + x₂)² = x₁² + x₂² + 2x₁x₂
+        assert_eq!(result.terms[&[0u32, 2] as &[u32]], 1);
+        assert_eq!(result.terms[&[0u32, 0, 2] as &[u32]], 1);
+        assert_eq!(result.terms[&[0u32, 1, 1] as &[u32]], 2);
+    }
+
+    #[test]
+    fn test_substitution_exp_handling() {
+        let x0 = Expr::new_var();
+        let x1 = Expr::new_var();
+        let x2 = Expr::new_var();
+
+        let x2_squared = x2.pow(2);
+        let x0_plus_x1 = x0 + x1;
+        let result = x2_squared.instantiate_vars(&mut [(2, x0_plus_x1)].into());
+
+        // (x₀ + x₁)² = x₀² + x₁² + 2x₀x₁
+        assert_eq!(result.terms[&[2u32] as &[u32]], 1);
+        assert_eq!(result.terms[&[0u32, 2] as &[u32]], 1);
+        assert_eq!(result.terms[&[1u32, 1] as &[u32]], 2);
+    }
 }

@@ -1,4 +1,4 @@
-pub mod polynomial;
+mod polynomial;
 
 use derive_more::From;
 use itertools::Itertools;
@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use polynomial::Expr;
+pub use polynomial::Expr;
 
 /// Typed IR, created via static analysis of UIR
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,7 +96,7 @@ pub enum Node {
     FuncPrim(Prim),
     TirOp(TirOp),
     ModPrim(Prim, Vec<Function>),
-    // Call(…),
+    Call(usize),
     // ...
 }
 impl crate::generic_ir::FunctionNode for Node {
@@ -155,15 +155,6 @@ impl ValueInfo {
             ValueInfo::Scalar(scalar) => Some(*scalar),
             ValueInfo::Array(array) => array.scalar_type(),
             ValueInfo::Map(map) => map.value_type.scalar_type(),
-            _ => None,
-        }
-    }
-
-    pub fn scalar_type_mut(&mut self) -> Option<&mut types::ScalarInfo> {
-        match self {
-            ValueInfo::Scalar(scalar) => Some(scalar),
-            ValueInfo::Array(array) => array.scalar_type_mut(),
-            ValueInfo::Map(map) => map.value_type.scalar_type_mut(),
             _ => None,
         }
     }
@@ -345,20 +336,9 @@ pub mod types {
                 | Self::Unranked { element_type, .. } => element_type,
             }
         }
-        pub fn element_type_mut(&mut self) -> &mut ValueInfo {
-            match self {
-                Self::Known { element_type, .. }
-                | Self::Ranked { element_type, .. }
-                | Self::Unranked { element_type, .. } => element_type,
-            }
-        }
 
         pub fn scalar_type(&self) -> Option<ScalarInfo> {
             self.element_type().scalar_type()
-        }
-
-        pub fn scalar_type_mut(&mut self) -> Option<&mut ScalarInfo> {
-            self.element_type_mut().scalar_type_mut()
         }
 
         pub fn sym_shape(&self) -> Option<std::borrow::Cow<'_, [Expr]>> {
