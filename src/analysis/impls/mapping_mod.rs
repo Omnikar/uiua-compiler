@@ -75,6 +75,7 @@ pub fn rows(
                             (None, None, ..) => {
                                 let inputs = inputs.to_mut();
 
+                                // TODO: If this expression is a nonzero constant, that constitutes sufficient information to just throw a compile error, rather than inserting a runtime check which we know will always fail
                                 if (n_expr.clone() - m_expr).as_const().is_none_or(|x| x != 0) {
                                     [(inputs[old_i], _), (inputs[new_i], _)] = tr.add_node(
                                         tir::TirOp::CheckAxes {
