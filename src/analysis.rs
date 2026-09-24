@@ -47,13 +47,15 @@ struct FunctionTranslator<'ctx> {
 }
 
 impl FunctionTranslator<'_> {
-    fn add_node<const N: usize>(
+    fn add_node<const N_OUTPUTS: usize>(
         &self,
         node: tir::Node,
         info: impl Into<tir::NodeMeta>,
         inputs: impl IntoIterator<Item = TirValue>,
-    ) -> [(TirValue, &ValueInfo); N] {
-        self.add_node_dyn(node, info, inputs, N).try_into().unwrap()
+    ) -> [(TirValue, &ValueInfo); N_OUTPUTS] {
+        self.add_node_dyn(node, info, inputs, N_OUTPUTS)
+            .try_into()
+            .unwrap()
     }
 
     fn add_node_dyn(
@@ -61,7 +63,7 @@ impl FunctionTranslator<'_> {
         node: tir::Node,
         info: impl Into<tir::NodeMeta>,
         inputs: impl IntoIterator<Item = TirValue>,
-        n: usize,
+        n_outputs: usize,
     ) -> Vec<(TirValue, &ValueInfo)> {
         let mut graph = self.tir_graph.borrow_mut();
         let node_idx = graph.add_node(node);
@@ -69,7 +71,7 @@ impl FunctionTranslator<'_> {
         for (in_i, input) in inputs.into_iter().enumerate() {
             graph.add_edge(node_idx, input.node_idx, (input.out_i, in_i));
         }
-        (0..n)
+        (0..n_outputs)
             .map(|out_i| TirValue { node_idx, out_i })
             .map(|val| (val, &self.info_map[&val.node_idx][val.out_i]))
             .collect()
