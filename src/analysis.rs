@@ -103,7 +103,7 @@ impl AnalyzeContext<'_> {
 
 pub fn construct_tir(uir: &uir::Uir) -> Result<tir::Tir, Error> {
     let mut tir = RefCell::new(tir::Tir {
-        structs: Vec::new(),
+        structs: translate_structs(uir)?,
         enums: Vec::new(),
         bindings: Vec::new(),
         main: None,
@@ -117,6 +117,22 @@ pub fn construct_tir(uir: &uir::Uir) -> Result<tir::Tir, Error> {
     }
 
     Ok(tir.into_inner())
+}
+
+fn translate_structs(uir: &uir::Uir) -> Result<Vec<tir::Struct>, Error> {
+    uir.structs
+        .iter()
+        .map(|struct_def| {
+            tir::Struct::try_from(struct_def).map_err(|err| {
+                Error::FancyError(Box::new(FancyError {
+                    files: Rc::clone(&uir.files),
+                    span: struct_def.fields[err.field_idx].2.clone().into(),
+                    input_spans: Vec::new(),
+                    kind: ErrorKind::Struct(err),
+                }))
+            })
+        })
+        .collect::<Result<_, _>>()
 }
 
 fn monomorphize_and_analyze(
@@ -311,5 +327,88 @@ impl TryFrom<uiua::Value> for ValueInfo {
     type Error = UiuaValueError;
     fn try_from(value: uiua::Value) -> Result<Self, Self::Error> {
         Self::try_from(&value)
+    }
+}
+
+#[derive(Debug, thiserror::Error, Clone, Copy)]
+pub enum FieldError {
+    #[error("Fields require shape specifiers")]
+    UnspecifiedShape,
+    #[error("Field's scalar type must be specified")]
+    UnspecifiedScalar,
+    #[error("Fields cannot contain unnamed structs")]
+    UnnamedSubstruct,
+}
+#[derive(Debug, thiserror::Error, Clone, Copy)]
+#[error("{error}")]
+pub struct StructError {
+    error: FieldError,
+    field_idx: usize,
+}
+impl TryFrom<&crate::uir::Struct> for tir::Struct {
+    type Error = StructError;
+    fn try_from(uir_struct: &crate::uir::Struct) -> Result<Self, Self::Error> {
+        let mut fields = Vec::new();
+        for (field_idx, (field_name, field_type, _field_span)) in
+            uir_struct.fields.iter().enumerate()
+        {
+            fields.push((
+                field_name.clone(),
+                ValueInfo::try_from(field_type.clone())
+                    .map_err(|error| StructError { error, field_idx })?,
+            ));
+        }
+        Ok(Self {
+            name: uir_struct.name.clone(),
+            info: types::BoundStructInfo {
+                fields: fields.into(),
+            },
+        })
+    }
+}
+impl TryFrom<uiua::Type> for ValueInfo {
+    type Error = FieldError;
+    fn try_from(value: uiua::Type) -> Result<Self, Self::Error> {
+        if value.shape.is_scalar() {
+            value.scalar.try_into()
+        } else if value.shape.is_any() {
+            Err(FieldError::UnspecifiedShape)
+        } else {
+            Ok(ValueInfo::Array(Box::new(types::ArrayInfo::Ranked {
+                element_type: value.scalar.try_into()?,
+                shape: value
+                    .shape
+                    .dims
+                    .into_iter()
+                    .map(tir::polynomial::Expr::from)
+                    .collect(),
+            })))
+        }
+    }
+}
+impl TryFrom<uiua::Scalar> for ValueInfo {
+    type Error = FieldError;
+    fn try_from(value: uiua::Scalar) -> Result<Self, Self::Error> {
+        use uiua::Scalar as UType;
+        use uiua::ScalarBox as UBoxType;
+        Ok(match value {
+            UType::Bool => ValueInfo::Scalar(types::ScalarInfo::Bool(None)),
+            UType::Nat | UType::Int => ValueInfo::Scalar(types::ScalarInfo::Int(None, false)),
+            UType::Num => ValueInfo::Scalar(types::ScalarInfo::Float(None)),
+            UType::Ascii | UType::Char => ValueInfo::Scalar(types::ScalarInfo::Char(None)),
+            UType::Box(UBoxType::Def(Some(struct_name), types)) => {
+                ValueInfo::Struct(types::UnboundStructInfo {
+                    name: struct_name.into(),
+                    fields: types
+                        .into_iter()
+                        .map(ValueInfo::try_from)
+                        .collect::<Result<_, _>>()?,
+                })
+            }
+            UType::Box(UBoxType::All(internal)) => internal.unboxed().try_into()?,
+            UType::Box(UBoxType::Def(None, _)) => return Err(FieldError::UnnamedSubstruct),
+            UType::Any => return Err(FieldError::UnspecifiedScalar),
+            _ => todo!("{value:?}"),
+        })
     }
 }

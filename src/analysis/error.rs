@@ -7,7 +7,7 @@ use std::ops::Range;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use super::UiuaValueError;
+use super::{StructError, UiuaValueError};
 
 #[derive(thiserror::Error, Debug)]
 #[error("{span}: {kind}")]
@@ -22,6 +22,8 @@ pub struct FancyError {
 pub enum ErrorKind {
     #[error("{0}")]
     UiuaValue(UiuaValueError),
+    #[error("{0}")]
+    Struct(StructError),
     #[error("Could not infer input rank")]
     Unranked(&'static str),
     #[error("Cannot take the {0} of a character")]
@@ -100,6 +102,7 @@ impl FancyError {
         use ErrorKind as Ek;
         match self.kind.clone() {
             Ek::UiuaValue(err) => self.simple(err, err.to_string(), [] as [&str; 0]),
+            Ek::Struct(err) => self.simple(err, err.to_string(), [] as [&str; 0]),
             Ek::Unranked(name) => self.simple(
                 &self.kind,
                 |c| {

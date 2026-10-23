@@ -34,13 +34,15 @@ pub struct Binding {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Struct {
     pub name: String,
-    pub fields: Vec<(String, uiua::Type)>,
+    pub fields: Vec<(String, uiua::Type, uiua::CodeSpan)>,
+    pub span: uiua::CodeSpan,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Enum {
     pub name: String,
     pub variants: Vec<Struct>,
+    pub span: uiua::CodeSpan,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, From, Serialize, Deserialize)]
