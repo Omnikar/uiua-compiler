@@ -56,7 +56,38 @@ fn pervasive_monadic(
             key_type: map_info.key_type.clone(),
             value_type: pervasive_monadic(&map_info.value_type, scalar_func)?,
         })),
-        _ => todo!(),
+        ValueInfo::Struct(struct_info) => ValueInfo::Struct(types::StructInfo {
+            fields: struct_info
+                .fields
+                .iter()
+                .map(|(name, field)| {
+                    Ok((name.clone(), pervasive_monadic(field, scalar_func.clone())?))
+                })
+                .collect::<Result<_, _>>()?,
+        }),
+        ValueInfo::Enum(enum_info) => ValueInfo::Enum(types::EnumInfo {
+            variants: enum_info
+                .variants
+                .iter()
+                .map(|(var_name, variant)| {
+                    Ok((
+                        var_name.clone(),
+                        types::StructInfo {
+                            fields: variant
+                                .fields
+                                .iter()
+                                .map(|(name, field)| {
+                                    Ok((
+                                        name.clone(),
+                                        pervasive_monadic(field, scalar_func.clone())?,
+                                    ))
+                                })
+                                .collect::<Result<_, _>>()?,
+                        },
+                    ))
+                })
+                .collect::<Result<_, _>>()?,
+        }),
     })
 }
 
