@@ -5,6 +5,7 @@ use derive_more::From;
 use elsa::map::FrozenMap;
 use itertools::Itertools;
 use petgraph::visit::EdgeRef;
+use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -42,28 +43,38 @@ struct FunctionTranslator<'ctx> {
     value_map: RefCell<HashMap<UirValue, TirValue>>,
     info_map: FrozenMap<NodeIndex, tir::NodeMeta>,
     span_map: RefCell<HashMap<NodeIndex, usize>>,
+    func_input_spans: Vec<&'ctx uiua::Span>,
 }
 
 impl FunctionTranslator<'_> {
-    fn add_node<const N: usize>(
+    fn add_node<const N_OUTPUTS: usize>(
         &self,
         node: tir::Node,
         info: impl Into<tir::NodeMeta>,
         inputs: impl IntoIterator<Item = TirValue>,
-    ) -> [(TirValue, &ValueInfo); N] {
+    ) -> [(TirValue, &ValueInfo); N_OUTPUTS] {
+        self.add_node_dyn(node, info, inputs, N_OUTPUTS)
+            .try_into()
+            .unwrap()
+    }
+
+    fn add_node_dyn(
+        &self,
+        node: tir::Node,
+        info: impl Into<tir::NodeMeta>,
+        inputs: impl IntoIterator<Item = TirValue>,
+        n_outputs: usize,
+    ) -> Vec<(TirValue, &ValueInfo)> {
         let mut graph = self.tir_graph.borrow_mut();
         let node_idx = graph.add_node(node);
         self.info_map.insert(node_idx, info.into());
         for (in_i, input) in inputs.into_iter().enumerate() {
             graph.add_edge(node_idx, input.node_idx, (input.out_i, in_i));
         }
-        <[TirValue; N]>::try_from(
-            (0..N)
-                .map(|out_i| TirValue { node_idx, out_i })
-                .collect_vec(),
-        )
-        .unwrap()
-        .map(|val| (val, &self.info_map[&val.node_idx][val.out_i]))
+        (0..n_outputs)
+            .map(|out_i| TirValue { node_idx, out_i })
+            .map(|val| (val, &self.info_map[&val.node_idx][val.out_i]))
+            .collect()
     }
 
     fn associate(&self, from: impl Into<UirValue>, to: impl Into<TirValue>) {
@@ -77,6 +88,29 @@ impl FunctionTranslator<'_> {
 
     fn infos<const N: usize>(&self, values: [TirValue; N]) -> [&ValueInfo; N] {
         values.map(|val| &self.info_map[&val.node_idx][val.out_i])
+    }
+
+    fn infos_dyn(
+        &self,
+        values: impl IntoIterator<Item = impl Borrow<TirValue>>,
+    ) -> impl Iterator<Item = &ValueInfo> {
+        values.into_iter().map(|val| {
+            let val = val.borrow();
+            &self.info_map[&val.node_idx][val.out_i]
+        })
+    }
+
+    fn get_uir_span(&self, uir_value: UirValue) -> &uiua::Span {
+        if self.uir_func.graph[uir_value.node_idx] == uir::Node::Input {
+            self.func_input_spans[uir_value.out_i]
+        } else {
+            &self.uir.spans[self
+                .uir_func
+                .spans
+                .get(&uir_value.node_idx)
+                .copied()
+                .unwrap_or(0)]
+        }
     }
 }
 
@@ -93,6 +127,7 @@ impl AnalyzeContext<'_> {
             files: Rc::clone(&self.tr.uir.files),
             span: self.span.clone(),
             input_spans: self.input_spans.iter().map(|&x| x.clone()).collect(),
+            call_spans: Vec::new(),
             kind,
         }))
     }
@@ -112,18 +147,19 @@ pub fn construct_tir(uir: &uir::Uir) -> Result<tir::Tir, Error> {
     });
 
     if let Some((uir_main, span)) = &uir.main {
-        let main = monomorphize_and_analyze(uir_main, &[], uir, &tir)?;
+        let main = monomorphize_and_analyze(uir_main, &[], uir, &tir, [])?;
         tir.get_mut().main = Some((main, *span));
     }
 
     Ok(tir.into_inner())
 }
 
-fn monomorphize_and_analyze(
+fn monomorphize_and_analyze<'ctx>(
     uir_func: &uir::Function,
     inputs: impl Into<Vec<ValueInfo>>,
     uir: &Uir,
     tir: &RefCell<Tir>,
+    func_input_spans: impl Into<Vec<&'ctx uiua::Span>>,
 ) -> Result<tir::Function, Error> {
     let inputs = inputs.into();
 
@@ -153,6 +189,7 @@ fn monomorphize_and_analyze(
         value_map: RefCell::new(value_map),
         info_map,
         span_map: RefCell::new(HashMap::new()),
+        func_input_spans: func_input_spans.into(),
     };
 
     for node_idx in uir_func.graph.node_indices() {
@@ -192,12 +229,13 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
         .edges(uir_node_idx)
         .sorted_by_key(|e| e.weight().1)
         .map(|e| {
+            let uir_value = UirValue {
+                node_idx: e.target(),
+                out_i: e.weight().0,
+            };
             (
-                tr.value_map.borrow()[&UirValue {
-                    node_idx: e.target(),
-                    out_i: e.weight().0,
-                }],
-                &tr.uir.spans[tr.uir_func.spans.get(&e.target()).copied().unwrap_or(0)],
+                tr.value_map.borrow()[&uir_value],
+                tr.get_uir_span(uir_value),
             )
         })
         .unzip();
@@ -223,6 +261,9 @@ fn translate_node(uir_node_idx: NodeIndex, tr: &FunctionTranslator) -> Result<()
             let [(value, _)] =
                 tr.add_node(tir::Node::Constant(value_info.clone()), [value_info], []);
             tr.associate((uir_node_idx, 0), value);
+        }
+        uir::Node::Call(uiua_func) => {
+            impls::translate_function_call(uiua_func, &inputs, ctx, uir_node_idx, tr)?;
         }
         uir::Node::FuncPrim(prim) if let Some(impl_fn) = impls::monadic_prim(*prim) => {
             let [input_info] = tr.infos([inputs[0]]);

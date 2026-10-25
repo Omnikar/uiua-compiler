@@ -1,10 +1,13 @@
 mod pervasive_monadic;
 mod pervasive_dyadic;
+mod func;
 
 use super::{AnalyzeContext, Error, ErrorKind, FunctionTranslator, TirValue, ValueInfo, types};
 use crate::{tir, uir};
 
 use uiua::{ImplPrimitive as Ip, Primitive as Pr};
+
+pub use func::translate_function_call;
 
 pub type MonadicImplFn = fn(&ValueInfo, AnalyzeContext) -> Result<ValueInfo, Error>;
 pub fn monadic_prim(prim: uir::Prim) -> Option<MonadicImplFn> {
