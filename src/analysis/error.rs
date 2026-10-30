@@ -13,6 +13,7 @@ use super::UiuaValueError;
 #[error("{span}: {kind}")]
 pub struct FancyError {
     pub files: Rc<HashMap<PathBuf, String>>,
+    pub string_inputs: Rc<[String]>,
     pub span: uiua::Span,
     pub input_spans: Vec<uiua::Span>,
     pub call_spans: Vec<uiua::Span>,
@@ -64,11 +65,12 @@ impl FancyError {
         source_msg: impl Msg,
         input_msgs: impl IntoIterator<Item = impl Msg>,
     ) {
-        let (source_path, source, range) = span_to_ariadne(&self.span, &self.files);
+        let (source_path, source, range) =
+            span_to_ariadne(&self.span, &self.files, &self.string_inputs);
         let (input_source_paths, input_sources, input_ranges): (Vec<_>, Vec<_>, Vec<_>) = self
             .input_spans
             .iter()
-            .map(|input_span| span_to_ariadne(input_span, &self.files))
+            .map(|input_span| span_to_ariadne(input_span, &self.files, &self.string_inputs))
             .multiunzip();
 
         let mut colors = PastelGenerator::new();
@@ -95,7 +97,7 @@ impl FancyError {
         let call_ariadne_spans = self
             .call_spans
             .iter()
-            .map(|call_span| span_to_ariadne(call_span, &self.files))
+            .map(|call_span| span_to_ariadne(call_span, &self.files, &self.string_inputs))
             .collect_vec();
         for (call_source_path, _, call_range) in &call_ariadne_spans {
             builder.add_label(
@@ -178,15 +180,17 @@ fn capitalize(s: &str) -> Cow<'_, str> {
 fn span_to_ariadne<'a>(
     span: &'a uiua::Span,
     files: &'a HashMap<PathBuf, String>,
+    string_inputs: &'a [String],
 ) -> (Rc<str>, &'a str, Range<usize>) {
     span.code_ref()
-        .and_then(|span| code_span_to_ariadne(span, files))
+        .and_then(|span| code_span_to_ariadne(span, files, string_inputs))
         .unwrap_or_else(|| (Rc::default(), "", 0..0))
 }
 
 fn code_span_to_ariadne<'a>(
     span: &'a uiua::CodeSpan,
     files: &'a HashMap<PathBuf, String>,
+    string_inputs: &'a [String],
 ) -> Option<(Rc<str>, &'a str, Range<usize>)> {
     match &span.src {
         uiua::InputSrc::File(path) => Some((
@@ -194,8 +198,12 @@ fn code_span_to_ariadne<'a>(
             &*files[&**path],
             span.start.char_pos as usize..span.end.char_pos as usize,
         )),
-        uiua::InputSrc::Str(_) => None,
-        uiua::InputSrc::Macro(code_span) => code_span_to_ariadne(code_span, files),
+        uiua::InputSrc::Str(i) => Some((
+            "<stdin>".into(),
+            &string_inputs[*i],
+            span.start.char_pos as usize..span.end.char_pos as usize,
+        )),
+        uiua::InputSrc::Macro(code_span) => code_span_to_ariadne(code_span, files, string_inputs),
         uiua::InputSrc::Literal(string) => Some((Rc::default(), string, 0..string.chars().count())),
     }
 }

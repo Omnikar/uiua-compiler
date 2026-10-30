@@ -125,6 +125,7 @@ impl AnalyzeContext<'_> {
     fn make_error(&self, kind: ErrorKind) -> Error {
         Error::FancyError(Box::new(FancyError {
             files: Rc::clone(&self.tr.uir.files),
+            string_inputs: Rc::clone(&self.tr.uir.string_inputs),
             span: self.span.clone(),
             input_spans: self.input_spans.iter().map(|&x| x.clone()).collect(),
             call_spans: Vec::new(),
@@ -144,6 +145,7 @@ pub fn construct_tir(uir: &uir::Uir) -> Result<tir::Tir, Error> {
         main: None,
         spans: uir.spans.clone(),
         files: uir.files.clone(),
+        string_inputs: uir.string_inputs.clone(),
     });
 
     if let Some((uir_main, span)) = &uir.main {

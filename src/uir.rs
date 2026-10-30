@@ -13,6 +13,7 @@ pub struct Uir {
     pub main: Option<(Function, usize)>,
     pub spans: Vec<uiua::Span>,
     pub files: Rc<HashMap<PathBuf, String>>,
+    pub string_inputs: Rc<[String]>,
 }
 
 impl std::fmt::Display for Uir {

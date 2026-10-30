@@ -74,6 +74,7 @@ pub fn construct_uir(uasm: &uiua::Assembly) -> Result<Uir, Error> {
                 .map(|entry| (entry.key().clone(), entry.value().to_string()))
                 .collect(),
         ),
+        string_inputs: uasm.inputs.strings.iter().map(Into::into).collect(),
     };
 
     let ignored_bindings = collect_structs_and_enums(uasm, &mut uir);
